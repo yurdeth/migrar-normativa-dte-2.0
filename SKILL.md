@@ -345,6 +345,18 @@ plan B, solo cuando el usuario responde que no sabe dónde está algo.
   `references/actualizacion_mh_solo_datos.sql` (solo datos, idempotente) son la
   alternativa autocontenida cuando no se usa sync_schema o el cliente está muy
   viejo. Están embebidos en esta skill para que no dependan del repo destino.
+  **Su contenido está VALIDADO contra MH** (ambiente 00, barrido completo de
+  los 262 tríos depto/municipio/distrito de `distritoMH` → todos con sello):
+  son la fuente canónica del catálogo. Uso de cada uno:
+  - `actualizacion_mh.sql` (estructura + datos): cuando el destino NO tiene
+    las tablas de catálogo (`distritoMH`, `municipioMH`, `paisesMH`) — las crea
+    ya con el contenido correcto.
+  - `actualizacion_mh_solo_datos.sql` (solo datos, `ON DUPLICATE KEY UPDATE`
+    keyed por `id`): cuando el destino YA las tiene — corrige/actualiza su
+    contenido, incluidos los cruces del tipo Norte/Sur intercambiados. Aplicar
+    DESPUÉS del SQL de estructura. Si además se quiere el SQL de salida del
+    port autocontenido, concatenar este bloque al final de
+    `migracion_sync_schema_desde_dte_testing.sql` en lugar de aplicarlo aparte.
 
 ## Modo de trabajo
 
@@ -373,7 +385,12 @@ continuo, ejecuta las fases en orden y reporta al final de cada una.
 4. Estado de catálogos MH del destino: si sus tablas `municipioMH`/`distritoMH`
    ya existen, verificar que traigan el catálogo v1.1 (07/2026): `municipioMH`
    con (31, 10, 'Cabañas Este') y (32, 11, 'Cabañas Oeste'), y `distritoMH` con
-   el este→10 / oeste→11. Si están viejos, aplicar
+   el este→10 / oeste→11. Ancla de Cuscatlán (lección real de un port de
+   2026-10: Cuscatlán Norte/Sur quedó cruzado y la muestra
+   de Cabañas no lo veía porque es el único grupo que MH valida bien tal cual):
+   `distritoMH` de depto 7 debe tener municipio 17 = distritos {6, 7, 9, 10, 15}
+   y municipio 18 = {1, 2, 3, 4, 5, 8, 11, 12, 13, 14, 16} — comparar por
+   `codigo`, NO por `id` (el `id` varía entre BDs). Si están viejos, aplicar
    `references/actualizacion_mh_solo_datos.sql` DESPUÉS del SQL de estructura
    (los ON DUPLICATE no tienen contra qué actualizar si las tablas no existen).
    Si están al día, no aplicar nada (solo metería nombres abreviados).
@@ -388,6 +405,21 @@ continuo, ejecuta las fases en orden y reporta al final de cada una.
    `distritoMH` (~263 filas: `id`, `codigo`, `nombre`, `id_departamento`,
    `id_municipio`), `municipioMH` (`codigo`, `nombre`, pertenencia a
    departamento) y `paisesMH` (`codigo`, `nombre`), siempre keyed por `id`.
+   **Límite del diff origen-destino (lección real de un port de 2026-10):** si el
+   dump de ORIGEN trae el mismo cruce que el destino, el diff da cero
+   divergencias y el error pasa desapercibido — comparar dos copias no valida
+   el contenido. Por eso el origen de esta skill ya está saneado y validado:
+   el catálogo de `references/actualizacion_mh_solo_datos.sql` se contrastó
+   contra la fuente primaria (el PDF "Catálogos – Facturación Electrónica"
+   en `https://factura.gob.sv/informacion-tecnica-y-funcional/`) y se verificó
+   completo ante MH (barrido de los 262 tríos depto/municipio/distrito en
+   ambiente 00: todos con sello). Para el port ya NO hace falta re-validar
+   emitiendo DTE de prueba: confiar en el catálogo de la skill y aplicar el
+   bloque corrector cuando aplique. OJO: la agrupación territorial
+   LERM/SSF/Wikipedia NO siempre coincide con lo que MH valida internamente
+   (Cabañas: MH acepta este→10 siendo "Oeste" en CAT-013) — no "corregir"
+   hacia la ley territorial; correcciones solo desde
+   `references/actualizacion_mh_solo_datos.sql`.
    Método canónico (la verificación canónica es contra los dumps, igual que en
    el resto de la skill): extraer el bloque `INSERT INTO \`<tabla>\`` de ambos
    dumps (origen `tmp/oss_dte_testing.sql` y dump destino), normalizar y diff.
