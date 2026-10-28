@@ -476,6 +476,30 @@ checklist. Resumen del orden que funcionó:
    quedó materializada en SU archivo real, no solo en el backend.
    Backend: `getDistritoAutocomplete()` + case en `_helpers.php`; guardado con
    `'id_distrito' => $distrito` en los ABM.
+   **Excluir `#distrito` de TODOS los inits genéricos de select2, no solo del
+   obvio (lección de un port real, 2026-10-28).** El formulario de alta y el de
+   edición suelen construir el select con clases DISTINTAS: el alta lo trae
+   harcodeado (clase `select`) y la edición lo arma un helper local (p. ej.
+   `crear_select()`, que asigna `select2 … selectt select`). Si el JS del
+   destino inicializa por VARIOS selectores (`$('.select').select2()` Y
+   `$('.selectt').select2()`), excluir `#distrito` solo del primero deja que el
+   segundo init —que corre DESPUÉS del bloque AJAX— lo pise y lo devuelva a
+   dropdown normal sin búsqueda: en el alta funciona y en la edición no, sin
+   ningún error de por medio (la vista de edición parte del helper y por eso
+   hereda la clase extra). Reglas derivadas:
+   - Al adaptar cada frente, grep de TODOS los `.select2(` genéricos del
+     archivo y agregar `.not('#distrito')` a cada uno que pueda matchear el
+     select por clase.
+   - En widgets con estado (select2, datepicker, máscaras) la inicialización
+     la gana la ÚLTIMA llamada: verificar el ORDEN de los inits, no solo su
+     presencia. "El bloque AJAX está" no significa "el bloque AJAX manda".
+   - Y al INSERTAR un bloque dentro de una función existente (prefill en
+     `activa_modalPago`, cascada en un handler), verificar que quedó DENTRO de
+     la función contenedora (antes de su `}` de cierre), no después de ella:
+     pegado fuera queda como código muerto que se ejecuta una sola vez al
+     cargar la página, con variables sin definir, y `node --check` pasa igual.
+     Sintaxis verde ≠ bloque vivo: señalar en el registro archivo y línea donde
+     el bloque quedó materializado DENTRO de su función.
 4. Opcionales que el usuario de este flujo suele querer: preguntar explícitamente
    si porta el **correo en modal de pago** (commit `7c8d0e5`; en sistemas con
    modal de pago propio, revisar su estructura antes de insertar el campo) y el
