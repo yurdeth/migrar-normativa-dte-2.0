@@ -527,9 +527,12 @@ checklist. Resumen del orden que funcionó:
    `$_SESSION`; localizar TODOS los `session_start()` del destino, no copiar
    la lista de archivos del origen. Junto con esa, portar también `fc521e34`
    (guard en `login.php`: con sesión activa redirigir a `dashboard.php` en vez
-   de dejar reloguear). De la guía §1.9, revisar además el **aviso de
-   suscripción pendiente** (`47942220`+`f67299bc`, OPCIONAL — preguntar al
-   cliente; por defecto portarlo apagado: `'activo' => false`).
+   de dejar reloguear). De la guía §1.9, portar también el **aviso de
+   suscripción pendiente** (`47942220`+`f67299bc`): SIEMPRE y sin preguntar,
+   en su estado final DESACTIVADO (`'activo' => false`), incluyendo la carpeta
+   `assets/img/` con sus imágenes y verificando con `ls` que llegaron al
+   destino (detalle en la fila de la guía). Igualmente portar `4f5e25c6`
+   (fix COF con retención: `montoTotalOperacion` bruto en `getResumenCOF`).
 7. Commits recientes con decisión de adaptación (guía §1.10 post-rango y
    §1.11): `6007e66` — ERET con productos loteados. **Verificar ANTES en el
    destino si se manejan lotes** (¿existe `producto.seguimiento_lote`? ¿los
