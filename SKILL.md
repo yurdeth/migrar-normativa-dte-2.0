@@ -320,6 +320,35 @@ PREGUNTÁRSELOS SIEMPRE al inicio — no escanear carpetas para adivinarlos.** E
 descubrimiento interno (buscar `dte_testing`, dumps, etc. en el filesystem) es
 plan B, solo cuando el usuario responde que no sabe dónde está algo.
 
+**Cómo preguntar: mediante los diálogos interactivos nativos del entorno, no en
+prosa.** Los CLIs de agentes traen un componente de preguntas al usuario que
+renderiza un formulario en la terminal: campo de texto editable, opciones
+navegables con flechas, y confirmación con Enter/submit (en ZCode es
+`AskUserQuestion`; en Claude Code y otros, el equivalente de "pregunta
+interactiva"). Al faltar parámetros, NO redactar una lista de preguntas en un
+mensaje plano esperando que el usuario conteste en texto libre: emitir UNA
+llamada a ese componente que agrupe todas las preguntas faltantes, con este
+mapeo por tipo:
+
+- **Rutas** (origen, destino, dumps): pregunta con entrada de TEXTO LIBRE — el
+  usuario escribe o pega la ruta y confirma con Enter. La etiqueta debe decir
+  qué es y un ejemplo de formato: "Ruta del repositorio ORIGEN (dte_testing),
+  ej.: /home/usuario/proyectos/dte_testing".
+- **Decisiones entre opciones conocidas** (¿BD en vivo sí/no?, ¿modo paso a
+  paso o continuo?, ¿portar el correo en modal de pago?): pregunta de
+  SELECCIÓN con las opciones listadas, para que el usuario navegue con flechas
+  y elija con Enter. Marcar la opción recomendada primero.
+- **Preguntas condicionales u "otra respuesta"**: todo componente de este tipo
+  ofrece escape libre ("Other"/"Otro"); usarse antes que pedir texto en prosa.
+
+La misma regla aplica a las demás preguntas que la skill manda hacer durante
+el port (modo de trabajo, opcionales de la FASE 2, la segunda revisión lógica
+de la FASE 3, decisiones condicionales que requieran al usuario): cada una se
+emite por el componente interactivo, no como párrafo interrogativo. Si el
+entorno donde corre la skill NO tiene ningún componente de preguntas
+interactivas, caer en prosa estructurada numerada (una pregunta por número,
+ordenada por parámetro) y esperar todas las respuestas antes de continuar.
+
 ## Importante sobre el entorno
 
 - Usar el binario `php` genérico. Si el proyecto destino corre una versión
