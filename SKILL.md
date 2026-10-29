@@ -378,6 +378,37 @@ continuo, ejecuta las fases en orden y reporta al final de cada una.
 2. Ejecutar el generador de SQL de estructura (desde el repo origen):
    `php db/sync_schema.php <dump_origen> <dump_destino> > <tmp_destino>/migracion_sync_schema_desde_dte_testing.sql`
    Sin flags extra por defecto (los datos de tablas existentes se manejan aparte).
+
+   **Regla dura (decisión del usuario, 2026-10-28): la salida de `sync_schema.php`
+   se entrega TAL CUAL — nunca se poda.** No se eliminan del .sql de salida ni
+   tablas ni columnas nuevas, NI SIQUIERA las que traigan a commits fuera de la
+   lista normativa (features de otros clientes acumuladas en el rango): decidir
+   qué esquema queda y qué no es una decisión MANUAL del usuario, tomada
+   después de recibir el archivo completo. Al .sql de salida final solo se le
+   AGREGA lo que el proceso ya agrega hoy: corrección de catálogos MH
+   (distritos cruzados, nombres/códigos mal puestos en el dump destino — el
+   bloque idempotente o los UPDATEs puntuales), INSERTs de `modulo` faltantes
+   y demás datos correctores. La revisión del punto 3 es para VERIFICAR que lo
+   esperado está, no para recortar lo que sobre.
+   Motivo (lección de un port real, 2026-10-28): el código normativo copiado
+   verbatim del HEAD (p. ej. los generadores de PDF) puede leer columnas de
+   features cuyo commit no está en la lista normativa (giros secundarios del
+   encabezado de sucursal, columna de lotes en el detalle); una poda "por
+   evidencia" con un grep de referencias incompleto dejó el primer PDF roto
+   (`Unknown column` → notices que contaminaban el buffer → FPDF abortaba con
+   "Some data has already been output"). Dejar una columna de más no cuesta
+   nada; quitar una viva rompe producción: el error es asimétrico y la poda
+   no lo paga quien la decide.
+
+   **Recordatorio obligatorio al usuario:** al entregar el .sql de salida (al
+   cerrar la FASE 1 y de nuevo en el informe final del port), recordar SIEMPRE
+   en el chat que le conviene darle una revisada al SQL resultante antes de
+   aplicarlo. El aviso es informativo y se redacta como sugerencia — nunca
+   como "este paso se volvió manual": el archivo no dará problemas al
+   aplicarse (los ALTER son puramente aditivos y MySQL/MariaDB los ejecuta
+   sin fallos), pero conviene que el usuario conozca qué tablas y columnas
+   nuevas trae y confirme que está de acuerdo con llevarlas todas.
+
 3. **Revisar el SQL generado antes de darlo por bueno:** debe traer las tablas
    nuevas de la normativa (`evento`, `evento_detalle`, `paisesMH`, `compras_json`,
    `distritoMH`/`municipioMH` si el destino no las tiene) y las columnas faltantes.
