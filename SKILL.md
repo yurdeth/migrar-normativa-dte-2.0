@@ -368,6 +368,24 @@ ordenada por parámetro) y esperar todas las respuestas antes de continuar.
   working tree (y aún así, preferir `git stash` antes que un `.bak`). Si se
   crearon `.bak` por hábito en un repo git, eliminarlos antes del cierre del
   port (lección real de un port anterior, 2026-10-17).
+
+- **Excepción acotada a la regla anterior: copia pre-port de los generadores PDF
+  de salidas en destinos SIN git.** Los generadores PDF (`dte_factura_pdf.php`,
+  `dte_fse_pdf.php`, `pdf_compra.php`, `fpdf185/factForm.php`,
+  `downloads/dteqr_pdf.php`, `_helper_ticket_dte.php` y los que el barrido de la
+  FASE 3 detecte) son los archivos que los clientes personalizan con más
+  frecuencia, y su estado previo al port necesita compararse AL FINAL aunque
+  durante el port no se pregunte nada (la decisión de qué hacer con las
+  personalizaciones se reporta al usuario al cierre, nunca se interrumpe el
+  modo de trabajo elegido a mitad del port). En un destino con seguimiento git
+  eso no cuesta nada (`git diff` contra HEAD); en un destino SIN git, crear
+  ANTES de tocarlos por primera vez una copia SOLO de esos archivos (p. ej.
+  `tmp/pre_port_pdf/<archivo>.orig`), fuera de las carpetas de salida
+  (`pdfdtes/`, `jsondte/`) y con nombre que impida confundirla con el original.
+  Esta copia NO viola la regla general de arriba: es específica de estos
+  archivos, existe para la revisión de cierre de la FASE 3 y no sustituye el
+  diff previo que ya exige el port de cada archivo. En un destino CON git NO
+  crear copia: git la sustituye.
 - No usar rutas ni alias propios de una máquina específica: todo se define con
   las rutas que el usuario dio en los parámetros.
 - Los archivos `references/actualizacion_mh.sql` (estructura + catálogos) y
@@ -508,6 +526,14 @@ checklist. Resumen del orden que funcionó:
    `js/funciones/evento_retorno.js` (fácil de olvidar), `pdf_compra.php`,
    `dte/scripts/_utiles.php` (merge si trae algo propio; su `factDetalle`
    reescrita NO es normativa), `admin_compras_fecha_dt.php` (si no hay código propio).
+   **Al llegar a los generadores PDF de salidas de esta lista** (`dte_factura_pdf.php`, `dte_fse_pdf.php`,
+   `pdf_compra.php`, `factForm.php`, y sus equivalentes en el destino): capturar su estado PRE-port conforme a
+   la excepción de copia de la sección "Importante sobre el entorno" (copia solo si el destino no tiene git; si
+   lo tiene, la comparación de cierre se hará con `git diff`). Esto es captura silenciosa, no pregunta al
+   usuario: si el PDF trae personalizaciones del cliente, portar los cambios normativos de la forma menos
+   invasiva posible (los bloques no-visuales: correo, API key, ruteo FSE, marca de agua, salida `output=file`),
+   dejar el diseño/integridad visual intacta y dejar la divergencia documentada para el reporte de cierre de la
+   FASE 3.
 2. Merges selectivos: `_helpers.php` (ALTO RIESGO: preservar funciones propias del
    cliente; portar `cliente_factura` con telefono/id_distrito, `getNombreDistrito`,
    `getDistritoAutocomplete` + case, `obtenerTextoVersionDTE`, `getDTERecidosFSEMH`;
@@ -908,11 +934,53 @@ encuentran hecha.
 
 ## FASE 3 — Cierre
 
+### Revisión post-port de los generadores PDF de salidas (OBLIGATORIA, silenciosa)
+
+Al terminar TODO el port (todas las fases anteriores cerradas), y SIN preguntar
+nada al usuario en este punto, revisar qué les pasó a los generadores PDF de
+salidas (`dte_factura_pdf.php`, `dte_fse_pdf.php`, `pdf_compra.php`,
+`fpdf185/factForm.php`, `downloads/dteqr_pdf.php`, `_helper_ticket_dte.php`,
+`_helper_dte.php` si imprime, y CUALQUIER otro generador que el port haya
+tocado según el registro — el barrido parte de los archivos tocados, no solo de
+la lista fija). El objetivo: detectar y reportar personalizaciones del cliente
+que el port haya tocado, sobrescrito o perdido, para que el usuario decida
+DESPUÉS qué recuperar. Método:
+
+1. **Estado pre-port:** con git (`git -C <destino> diff HEAD -- <archivo>` si el
+   archivo estaba commiteado) o contra la copia `tmp/pre_port_pdf/` creada en la
+   FASE 2 (destinos sin git). Si el destino es repo git pero el archivo tenía
+   cambios sin commitear al inicio del port, la comparación contra HEAD mezcla
+   lo propio del cliente con lo del port — en ese caso usar la copia (creada por
+   la regla de cambios sin commitear) o documentar la limitación.
+2. **Dos comparaciones por archivo** (ambas, no una sola):
+   (a) **pre-port vs post-port del destino** → qué cambió el port en el archivo
+   (esto valida que el port solo tocó lo normativo); y
+   (b) **pre-port del destino vs el mismo archivo del ORIGEN** → qué había
+   personalizado el cliente respecto al base (divergencias de diseño, columnas,
+   textos, lógica de qué se muestra). El cruce (a)+(b) identifica si alguna
+   personalización quedó pisada por la versión del origen o fusionada mal: todo
+   lo que aparezca en (b) y haya desaparecido o mutado en (a) es hallazgo.
+3. **Si hubo hallazgos y el usuario los quiere recuperar**, restaurar desde la
+   copia/git solo los fragmentos personalizados, re-aplicando encima los bloques
+   normativos no-visuales (correo, API key, ruteo FSE, marca de agua) — nunca
+   restaurar el archivo completo pre-port: perdería la normativa.
+4. **Salida obligatoria:** sección **"Personalizaciones PDF detectadas en el
+   cierre"** en el registro (archivo, qué difería del origen, qué hizo el port,
+   estado final y si el usuario debe decidir algo) y el resumen de estos
+   hallazgos en el informe final al usuario. Si no hubo hallazgos, dejar la
+   sección con "sin divergencias" y la evidencia de los diffs ejecutados.
+   Esta revisión se reporta como INFORME, nunca como pregunta a mitad del port:
+   respeta el modo de trabajo que el usuario eligió al inicio.
+
 0. **Limpieza:** si el destino es un repo git y quedaron archivos de respaldo
    (`.bak`, `*.pre-port.bak`, etc.), eliminarlos antes del registro — la
    reversión/comparación se hace con git (`git diff`, `git restore`), ver
    regla en "Importante sobre el entorno". Verificar con
    `git -C <destino> status --short` que solo queden los cambios reales del port.
+   (La copia `tmp/pre_port_pdf/` NO se elimina aquí: se usa primero en la
+   revisión de arriba y se conserva como evidencia del registro y como backup
+   hasta el veredicto del usuario — su eliminación definitiva corresponde al
+   paso 5 de limpieza final, al cierre de todo el port.)
 1. Registro: escribir/actualizar un `REGISTRO_MIGRACION_NORMATIVA_2_0.md` en el
    `tmp/` del destino con: qué se portó (por archivo y fragmento), qué se dejó
    fuera y por qué (commit de origen), las **cadenas de llamadas verificadas**
@@ -929,7 +997,9 @@ encuentran hecha.
    por el commit → archivo/línea del destino donde se materializa, o PENDIENTE
    si no se puede señalar), el estatus de
    `venta2.php` (en uso / residuo, qué se le aplicó y **los comandos con que
-   se verificó la clasificación**, per la regla de clasificación de arriba),
+   se verificó la clasificación**, per la regla de clasificación de arriba), la
+   sección **"Personalizaciones PDF detectadas en el cierre"** de la revisión
+   post-port de generadores PDF (arriba),
    y las decisiones pendientes del cliente.
    Este registro es lo que permite auditar y replicar en el siguiente sistema.
 2. Pruebas del usuario en ambiente 00 (`DTE_ENVIRONMENT=00`): COF mostrador, CCF,
@@ -979,3 +1049,24 @@ encuentran hecha.
    pendiente en el registro. El port no se da por "funcional" hasta que esta
    revisión se haya hecho o el usuario la haya declinado explícitamente: un
    checklist tachado no equivale a código que funciona.
+5. **Limpieza final de archivos temporales del port (después de TODO lo demás,
+   incluida la revisión PDF y el veredicto del usuario sobre ella).** Durante
+   el port la skill puede haber creado archivos temporales de respaldo o
+   comparación — la copia `tmp/pre_port_pdf/` de los generadores PDF en
+   destinos sin git, y CUALQUIER otro archivo que el propio port haya creado
+   con ese fin (copias `.orig`/`.bak` de comparación, copias de trabajo). Al
+   cerrar todo: (a) **inventariar** los temporales creados por la skill (listar
+   rutas exactas, distinguirlos de los dumps SQL de origen/destino y demás
+   insumos que el USUARIO aportó — esos NUNCA se tocan); (b) **reportarlo al
+   usuario en el informe final**, en estos términos: existen archivos de copia
+   temporal que sirven de backup mientras él revisa los hallazgos (PDFs
+   incluidos), y NO deben commitearse ni subirse — no pintan nada en el
+   repositorio y un commit accidental los arrastraría; (c) **esperar el
+   veredicto final del usuario** (¿hay algo que recuperar de las copias?); y
+   (d) una vez dado ese veredicto, **eliminarlos el propio agente** sin pedir
+   otra confirmación por archivo — el listado del punto (a) ya fue su
+   autorización. Si el usuario indica que aún quiere conservarlos, quedan como
+   pendiente de limpieza anotado en el registro. El cierre del port debe dejar
+   el working tree del destino con SOLO los cambios reales del port
+   (`git status --short` limpio de temporales, o sin archivos huérfanos en
+   destinos sin git).
