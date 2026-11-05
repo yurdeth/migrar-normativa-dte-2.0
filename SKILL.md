@@ -651,6 +651,7 @@ checklist. Resumen del orden que funcionó:
    en `output=file` con `ob_start`) + handlers `#btnSendMail`/`#btnSaveEmail`
    en `getAuth.js`. Sin el refactor cosmético de índices `dt` del admin; rama
    CRE muerta documentada (el archivo al que apunta no existe ni en el origen).
+7b. `453cf0a` + merge `6747dda4` — mensajes personalizados MH + validación temprana de distrito + guard de token (guía §1.15, HEAD del origen): portar junto con el rango. `assets/json/mh_mensajes.json` NUEVO (público, el JS lo hace fetch sin sesión; `aee0b71` lo mueve a assets/json), `mensajePersonalizadoMH` PHP en `_helpers.php` (alcanza vía `_core`), validación temprana de sucursal sin distrito en `Dte.php`, guard de token undefined/"undef" en getAuth/dte_auto (antes el forEach de observaciones reventaba en silencio), Swal persistente desde `util.js` — **verificar con grep que cada página que carga getAuth/dte_auto/venta* llegue a un include de `util.js`** (en el origen lo traen footer.php/footer2.php). Los 4 JS van por ANCLAS (los destinos tienen versiones propias). Sin conflicto con §1.13/§1.14: este commit no toca el cálculo del cuerpo.
 8. **venta2**: aplicar la regla de `venta.php`/`venta2.php` de la sección "El
    criterio de parada" — detectar si venta2 está en uso o es residuo y, si está
    en uso, repetir en él todos los cambios de venta (sin unificar).

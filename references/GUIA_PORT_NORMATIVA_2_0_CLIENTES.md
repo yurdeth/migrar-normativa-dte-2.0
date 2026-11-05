@@ -373,6 +373,54 @@ primera NC con desc y cantidad>1 choque con `CALCULO INCORRECTO`.
 
 ---
 
+### 1.15 Mensajes personalizados MH + validacion temprana de distrito + guard de token (`453cf0a` + merge `6747dda4`, 2026-11-05 — HEAD del origen)
+
+Robustez/UX del flujo DTE ligada al frente de distritos. Portar SIEMPRE
+junto con el rango (los rechazos que personaliza son los que el propio port
+de distritos evita/declara). Archivos: `assets/json/mh_mensajes.json` (NUEVO; `60ed2bf` lo extiende con
+DUI/Giro y `aee0b71` lo mueve a assets/json — copiar con su subcarpeta), `_helpers.php` (funcion PHP `mensajePersonalizadoMH` al final),
+`clases/Dte.php` (validacion temprana), `generar_dte.php`,
+`js/funciones/util.js` (helpers JS al final), `getAuth.js`, `dte_auto.js`,
+`venta.js`, `venta2.js`.
+
+| Parte | Que trae |
+|---|---|
+| `mh_mensajes.json` | Catalogo de patrones de rechazos frecuentes de MH -> guia para el operador (patrones en mayusculas con puntos convertidos a barras: "emisor.direccion.distrito" -> EMISOR/DIRECCION/DISTRITO). Extensible sin tocar codigo |
+| `_helpers.php` | `mensajePersonalizadoMH($textoError)`: lee el JSON (cache estatica), devuelve la guia o '' . Reachable por `_core -> _helpers` (generar_dte la llama desde el HTML de initial) |
+| `clases/Dte.php` | Validacion TEMPRANA en el armado del emisor: sucursal con `id_distrito` vacio/0 lanza excepcion accionable ANTES de enviar (antes MH rechazaba con [emisor.direccion.distrito] VALOR NO ES PERMITIDO) |
+| `generar_dte.php` | Apende la guia personalizada al mensaje del modal cuando la respuesta/observaciones matchean |
+| `util.js` (JS) | `mensajePersonalizadoMH` (fetch del JSON con cache), `mostrarAvisoMH`/`avisarErrorMH` (Swal PERSISTENTE que se resuelve solo al pulsar Entendido: quien espera la promesa no recarga hasta el clic), `_cargarSwal` (carga perezosa de sweetalert2 + estilos .swal-mh-grande) |
+| `getAuth.js` / `dte_auto.js` | GUARD de token: si `codigoMsg` llega undefined/"undef" (no hubo respuesta de MH por falta/expiracion de token) se informa y SALE sin procesar — antes el forEach de observaciones reventaba en silencio. Normalizacion de observaciones (undefined/string CSV -> array). Errores rutados por `mostrarAvisoMH` |
+| `venta.js` / `venta2.js` | `crea_dte` en try/catch: el error del backend (ej. sucursal sin distrito) muestra su Swal y la recarga espera al clic |
+
+**Detalles de port:**
+
+- **Los 4 JS van por ANCLAS, no copia completa** (los destinos tienen
+  versiones propias de venta/venta2/getAuth/dte_auto): (a) el guard de token
+  al inicio del `save_response`/`respuesta_MH` de getAuth y dte_auto; (b) la
+  normalizacion de observaciones junto al guard; (c) el try/catch de
+  `crea_dte` en el flujo automatico de venta/venta2; (d) sustituir los
+  `display_notify` de error MH por `mostrarAvisoMH` (getAuth ~276, dte_auto
+  ~192).
+- **`util.js` DEBE cargar en toda pagina que use getAuth/dte_auto/venta***.
+  En el origen lo traen footer.php/footer2.php (include_js_once) y asi
+  alcanza venta/venta2/admin_compras_fecha/admin_factura_rangos — en el
+  destino verificar con grep que cada pagina critica llegue a un include de
+  util.js (directo o via su footer real); si no, agregarlo. Los helpers son
+  top-level: solo se invocan desde handlers, así que basta que el script
+  este en la pagina aunque cargue despues del que lo llama.
+- **`assets/json/mh_mensajes.json` debe quedar PUBLICO** (el JS lo hace
+  fetch sin sesion): copiar la subcarpeta completa al destino y verificar
+  con una peticion HTTP directa que sirve 200. El archivo es de datos: actualizarlo NO requiere
+  deploy.
+- La validacion temprana del distrito usa `$row->id_distrito` de sucursal —
+  el destino ya trae la columna (via port de distritos); si una sucursal
+  real la tiene en 0, el primer DTE lo va a reclamar: es el comportamiento
+  buscado.
+- Diferencia con §1.13/§1.14: este commit NO toca el calculo del cuerpo; es
+  UX de errores + guard de token + validacion temprana. Puede portarse
+  despues del rango sin conflictos.
+
 ## 2. COMMITS NO NORMATIVOS DETECTADOS (no portar por defecto)
 
 Trazados con `git log -S`. Están en el rango temporal o cerca, pero NO son normativa:
@@ -488,4 +536,5 @@ destinos tienen dos archivos casi idénticos: `venta.php` (sin DTE automático) 
 - [ ] `venta2.php` clasificado (en uso / residuo); si en uso, cambios de venta aplicados en ambos archivos sin unificar
 - [ ] NC con items exentos (`3aa8db1`, §1.13): notacredito no divide exentos (cuerpo y prefill), `getResumenNC` suma `totalExenta` al montoTotalOperacion, saldo de devoluciones excluye anuladas (`id_factura_dev` escrito; el histórico NO se backfillea — decisión del usuario). Prueba ambiente 00: NC mixta exenta/gravada con retención + segunda devolución tras anular la primera
 - [ ] Identidad cuerpo CCF/NC + descuento prorrateado en NC (`64a1dac`, §1.14): los 3 archivos juntos (Dte.php, notacredito.php, notacredito.js); helpers JS a top-level; `factura_detalle.descuento` en las 2 ramas del UNION de `initial()`; Prueba ambiente 00: CCF y NC sobre venta con desc por ítem (un exento con desc + un gravado con desc y cantidad ≥ 100) — la NC total debe caer al total de la base
+- [ ] Mensajes personalizados MH + guard de token (`453cf0a`, §1.15): `mh_mensajes.json` copiado y servido público (fetch 200 directo), `util.js` incluido en TODA página que cargue getAuth/dte_auto/venta* (grep), guard de token en ambos JS, validación temprana de distrito de sucursal activa (probar con una sucursal en 0 → excepción accionable, no rechazo MH)
 - [ ] Pruebas ambiente 00 del checklist §4.6
