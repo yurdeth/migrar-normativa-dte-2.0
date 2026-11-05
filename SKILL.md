@@ -351,6 +351,70 @@ ordenada por parámetro) y esperar todas las respuestas antes de continuar.
 
 ## Importante sobre el entorno
 
+- **REGLA DURA — Las pruebas de esta skill son SOLO-LÓGICAS: nunca se transmite
+  ante Hacienda ni se toca material de firma... EXCEPCIÓN: cuando el usuario lo
+  pide explícitamente.** La verificación por defecto de esta skill es
+  verificar que el CAMINO a la meta esté bien, no llegar a la meta y obtener el
+  premio: cuando el operador llegue (emita de verdad en ambiente 00 con sus
+  certificados), el camino debe estar tan verificado que obtener el sello sea el
+  desenlace natural.
+
+  **EXCEPCIÓN a la regla (solo por pedido explícito del usuario):** el usuario
+  puede querer que el agente haga pruebas reales ante Hacienda desde CLI — por
+  ejemplo porque ya cargó las credenciales del ambiente de PRUEBA 00 y sus
+  certificados de prueba, o porque el chat va encaminado a eso y él lo
+  solicita. En ese caso SÍ se puede, sin problema: emitir COF/CCF/NC/FSE de
+  prueba, anular, consultar, firmar, transmitir — siempre que (a) el usuario lo
+  haya pedido o aprobado en esa conversación (un "probara ante hacienda" del
+  usuario alcanza; el agente NUNCA lo decide por su cuenta ni lo infiere solo
+  del hecho de que haya certificados en el entorno), y (b) sea el ambiente de
+  PRUEBA 00 o el que el usuario indique — jamás producción por iniciativa del
+  agente. Fuera de esa excepción, el default es el modo solo-lógico descrito
+  abajo. La petición explícita del usuario queda documentada en el registro del
+  port (qué se probó en 00 y con qué resultado) para que no haya ambigüedad.
+
+  Límites exactos del modo por defecto (solo-lógico), aplicables a TODAS las
+  fases (traza de llamadas, segunda revisión, harnesses CLI, pruebas de
+  navegador):
+
+  **PROHIBIDO en el modo por defecto (es trabajar ya con Hacienda; la
+  excepción de arriba lo habilita solo por pedido explícito del usuario):**
+  - Enviar cualquier petición a los endpoints de MH (`apitest.dtes.mh.gob.sv`,
+    `api.dtes.mh.gob.sv`, recepciondte, recepcionlote, contingencia, anulardte,
+    consultadte, auth/token) — ni de prueba ni "solo para ver qué responde".
+  - Usar, leer, copiar o cargar certificados/llaves privadas reales
+    (`privKey`, `clv`, `pwd_privkey` de sucursal, archivos .key/.p12): la
+    firma (`generateSignature`, `creaEventoERET` hasta su firma) es territorio
+    de certificados. Un harness NO debe construir el JWT firmado.
+  - Ejecutar los flujos completos de emisión/invalidación "de punta a punta"
+    (creaJsonDTe → enviar → save_response_mh) ni simularlos en ambiente 00:
+    esa pasada es SIEMPRE del usuario, con sus certificados y su ambiente.
+    Si un harness llega por accidente a un paso con material de firma o red
+    hacia MH, se detiene ahí y se re-scopea, no se "ya que estoy, termino".
+
+  **PERMITIDO (lo lógico: verificar que todo lo que existe funcione en cadena):**
+  - Ejecutar por CLI/HTTP local los CALCULADORES puros: `getCuerpoCOF/CCF/NC`,
+    `getResumen*`, `getIdentificacionDte`, `getReceptor*`, `getEmisor`,
+    `getFacturaPagoTipo`, `getDocRelacionado` — y verificar los VALORES que
+    producen (identidad MH por ítem, totales, prorrateos, documentos, códigos)
+    contra datos reales del dump o sintéticos en una BD de copia.
+  - Renderizar PDFs locales (`output=file` a `pdfdtes/`), JSON de respuesta,
+    contratos de adjuntos — con la API key de correo neutralizada/ vacía para
+    que ningún envío sea posible y con display_errors como en el servidor.
+  - Verificar dependencias: imports, includes, autoloads, variables, rutas de
+    archivos, tablas/columnas que tocan las queries, configuración del `.env`
+    (existencia de valores, no su uso), y que cada página/case del dispatcher
+    responde con lo esperado (JSON limpio, sin notice).
+  - Simular la VALIDACIÓN del resultado (parsear el JSON armado y comprobar
+    sus invariantes contra las reglas del manual MH), sin enviarlo.
+
+  Motivación (port real 2026-11-05): en la segunda revisión un harness de
+  `creaJsonDTE` construyó y FIRMÓ un JWT con la llave del dump — no hubo
+  transmisión, pero cruzó el límite de certificados sin necesidad: los
+  invariantes se podían (y se podían mejor) verificar con los métodos
+  calculadores puros, sin la firma. La regla evita repetirlo y evita que un
+  agente en otro proyecto dé por hecho que "probar el flujo" incluye tocar
+  el endpoint de MH.
 - Usar el binario `php` genérico. Si el proyecto destino corre una versión
   distinta de PHP, validar sintaxis con la versión que corresponda a SU runtime
   (averiguar por su documentación/composer), nunca asumir la del sistema.
@@ -1026,7 +1090,14 @@ DESPUÉS qué recuperar. Método:
    post-port de generadores PDF (arriba),
    y las decisiones pendientes del cliente.
    Este registro es lo que permite auditar y replicar en el siguiente sistema.
-2. Pruebas del usuario en ambiente 00 (`DTE_ENVIRONMENT=00`): COF mostrador, CCF, NC sobre venta (INCLUIR SIEMPRE una NC mixta exenta/gravada con retención: con gravados puros los defectos de `3aa8db1` pasan por accidente),
+2. Pruebas de ambiente 00 (`DTE_ENVIRONMENT=00`): **por defecto el usuario las
+   ejecuta; el agente JAMÁS por iniciativa propia** (regla dura de "Importante
+   sobre el entorno": nada de endpoints de MH ni material de firma por parte
+   del agente). EXCEPCIÓN: si el USUARIO lo pide explícitamente en la
+   conversación — p. ej. porque ya cargó credenciales 00 y certificados de
+   prueba — el agente puede ejecutar estas mismas pruebas reales ante MH desde
+   CLI, con su aval y siempre en 00. La lista de casos: COF
+   mostrador, CCF, NC sobre venta (INCLUIR SIEMPRE una NC mixta exenta/gravada con retención: con gravados puros los defectos de `3aa8db1` pasan por accidente),
    NC sobre venta, FSE, anulación de cada tipo (con marca de agua en PDF),
    consulta DTE, evento retorno, envío de correo por TODAS sus rutas (automático
    al aceptar, automático al anular, botón manual, modal de reenvío si existe),
@@ -1056,16 +1127,24 @@ DESPUÉS qué recuperar. Método:
    rutas de UI hacia el mismo efecto con estados de parche distintos, tipos que
    cambian de contexto, valores que el destino produce distintos a los del
    origen. La revisión busca que el código portado realmente FUNCIONE en el
-   destino, no solo que esté. Al cerrar el port, preguntarle al
+   destino, no solo que esté. **Alcance obligatorio de esta revisión (regla
+   dura "solo-lógico" de "Importante sobre el entorno"): los harnesses y
+   pruebas de esta revisión se detienen en los calculadores puros (cuerpo,
+   resumen, identificación, receptor, pagos) y en la salida local (PDF,
+   JSON, contratos); JAMÁS construyen el JWT firmado (es material de
+   certificados) ni tocan un endpoint de MH. "Punta a punta" significa
+   hasta la frontera del sello, no cruzarla: se valida que el camino a la
+   meta esté bien, no que se llegue a la meta.** Al cerrar el port, preguntarle al
    usuario en estos términos:
 
    > "Verifiqué que todo lo portado existe, sus dependencias resuelven, la
    > sintaxis está en verde y la coherencia lógica de estados/controles quedó
    > revisada (FASE 2.5). Puedo hacer además una **segunda revisión lógica a
-   > detalle de valores**: seguir los flujos de cada funcionalidad modificada de
-   > punta a punta (botón → JS → endpoint → clase → BD → respuesta) para
-   > confirmar los datos que viajan por cada ruta, no solo que el código esté.
-   > ¿La hago?"
+   > detalle de valores**: seguir los flujos de cada funcionalidad modificada
+   > por la cadena lógica (botón → JS → endpoint → clase → BD → respuesta,
+   > hasta la frontera del sello: cálculos, JSON armado, PDF, contratos — sin
+   > firmar con certificados ni transmitir ante Hacienda) para confirmar los
+   > datos que viajan por cada ruta, no solo que el código esté. ¿La hago?"
 
    Si el usuario acepta: ejecutar la revisión por flujo (generación DTE, respuesta
    MH, anulación, PDF/correo, ERET, admins, venta/venta2), reportar hallazgos y
