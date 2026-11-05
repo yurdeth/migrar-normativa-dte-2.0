@@ -227,7 +227,7 @@ si se porta ese, llevar también esta inicialización.
 
 ---
 
-### 1.12 Modal de reenvío de DTE (`d0ad9de`, 2026-10-23 — HEAD del origen)
+### 1.12 Modal de reenvío de DTE (`d0ad9de`, 2026-10-23)
 
 **Qué es:** reenvío MANUAL del DTE por correo mediante un MODAL en el admin de
 facturas: el operador elige destinatario (prefill con el email del cliente) y
@@ -269,6 +269,43 @@ automático ni al viejo "Enviar PDF DTE" (`output=text`): conviven los tres.
 - **Backend del "Guardar" correo:** `update_client_email` valida email,
   compara contra el actual (`strcasecmp`) y hace `UPDATE cliente SET email`
   escapado con `addslashes` — portar tal cual.
+
+---
+
+### 1.13 NC con items exentos: precio del cuerpo, montoTotalOperacion y saldo de devoluciones anuladas (`3aa8db1`, 2026-11-04 — HEAD del origen)
+
+Tres defectos ENCADENADOS que solo se destapan emitiendo una NC con
+items EXENTOS mezclados con gravados (con gravados puros los tres pasan
+por accidente y las pruebas nunca los vieron). Portar SIEMPRE el commit
+completo y aplicar el backfill de datos que trae abajo:
+
+| Archivo | Qué corregir | Por qué |
+|---|---|---|
+| `js/funciones/notacredito.js` (2 puntos: keyup `#cant` y `total()`) | NO dividir el precio entre `factorIVA` cuando la fila es exenta (ancla: el hidden `#exento` de la fila) | El modelo de datos es `factura_detalle.precio_venta` CON IVA y `subtotal` NETO; dividir un exento infla el cuerpo: `12×3/1.13=31.86 ≠ 36` → MH rechaza `[cuerpoDocumento.item.n] CALCULO INCORRECTO` |
+| `notacredito.php` (subtotal inicial de filas con lotes + prefill de `#cant`) | Mismo criterio exento en el ternario del subtotal inicial; y precargar en `#cant` el SALDO PENDIENTE (`vendido − devuelto`, clamp ≥0), no la cantidad total vendida | El guard del backend rechaza `(devueltas + cant) > vendida`: un formulario precargado con el total vendido falla siempre que exista una devolución previa, sin error de por medio |
+| `clases/Dte.php` (`getResumenNC`) | `montoTotalOperacion = round($totalGravada + $totalExenta + $calc_iva, 2)` | La fórmula NCE v4 es `exenta + gravada + IVA`, BRUTO; la retención solo resta del `totalPagar`. Fórmula validada contra un CCF ACEPTADO por MH con la misma mezcla (te 300 + tg 283.19 + iva 36.81 = 620). NC sin exentos suma 0 y no cambia. COF (v2: `subTotalVentas`, tributos no se suman — regla `ac76119`) y CCF ya calculaban bien; NO "alinearlos" con esta fórmula |
+| `notacredito.php` (2 puntos: flujo devolución y flujo ajuste) + `devolucion.php` (1 punto) | Tras crear la factura NC/DEV, escribir el enlace que faltaba: `_update("devoluciones", ['id_factura_dev' => $id_factura_nueva], "id_dev=$id_dev")` | La columna existe pero NINGÚN flujo la escribía (queda 0): sin el enlace es imposible saber qué devoluciones pertenece a una NC anulada |
+| `notacredito.php` (`dev_ant` y guard `totalDevoluciones`) + `devolucion.php` (`dev_ant`) | Excluir las filas cuya factura generadora esté anulada (LEFT JOIN `factura` por `id_factura_dev` + `fnc.id_factura IS NULL OR fnc.anulada=0`; el guard con NOT EXISTS) | La anulación revierte stock pero las filas de `devoluciones_det` contaban para siempre: "Dev. Anteriores" mentía y el guard bloqueaba nuevas devoluciones |
+
+**Datos históricos — NO hacer backfill masivo (decisión del usuario,
+2026-11-05):** las devoluciones creadas ANTES del port quedan con
+`id_factura_dev=0` y SIGUEN contando para el saldo: ese es su
+comportamiento histórico y lo antiguo queda como está. El enlace solo se
+escribe para devoluciones NUEVAS (desde el port en adelante). El UPDATE
+(`UPDATE devoluciones SET id_factura_dev=<id NC/DEV> WHERE id_dev=<X> AND
+id_factura_dev=0;`) NO es parte del port: procede únicamente como
+reparación MANUAL, caso por caso, cuando el operador identifica una
+devolución concreta bloqueada por una NC/DEV recién anulada cuyo documento
+generador se conoce CON CERTEZA (el caso típico: NCs de prueba creadas
+durante la validación del propio port). El histórico no es reconstruible
+(la columna nunca se escribió), así que nunca intentar deducir el mapeo en
+masa: una deducción equivocada altera saldos reales.
+
+**Prueba de cierre (ambiente 00, obligatoria):** NC mixta exenta + gravada
+CON retención sobre un CCF aceptado: item exento con `ventaExenta = cant ×
+precioUni` exacto, `montoTotalOperacion = te + tg + iva`, `totalPagar = mto
+− ivaRete`, y reintentar una segunda devolución tras anular la primera
+(Dev. Anteriores debe volver a 0 con el backfill aplicado).
 
 ---
 
@@ -385,4 +422,5 @@ destinos tienen dos archivos casi idénticos: `venta.php` (sin DTE automático) 
 - [ ] **Coherencia lógica funcional (FASE 2.5, obligatoria)**: inventario de controles de los admins/formularios tocados (y de los que muestren entidades cuyo estado cambió), matriz estado×acción — toda acción visible debe ser ejecutable con éxito en el estado donde se renderiza; etiqueta↔efecto en cada acción (anular anula, eliminar elimina, enviar dispara el correo real por todas sus rutas); todo guard de backend alcanzable desde un click normal se mitiga en el frontend (ocultar el control) sin quitar el guard
 - [ ] **Correcciones de coherencia del origen mitigadas y reportadas**: defectos de lógica verificados que venían en el código del origen se arreglaron en el destino (no se copiaron), quedaron en la sección "Correcciones de coherencia lógica aplicadas (no normativas)" del registro, y se enumeraron al usuario en el informe final con recomendación de replicarlos en el origen
 - [ ] `venta2.php` clasificado (en uso / residuo); si en uso, cambios de venta aplicados en ambos archivos sin unificar
+- [ ] NC con items exentos (`3aa8db1`, §1.13): notacredito no divide exentos (cuerpo y prefill), `getResumenNC` suma `totalExenta` al montoTotalOperacion, saldo de devoluciones excluye anuladas (`id_factura_dev` escrito; el histórico NO se backfillea — decisión del usuario). Prueba ambiente 00: NC mixta exenta/gravada con retención + segunda devolución tras anular la primera
 - [ ] Pruebas ambiente 00 del checklist §4.6

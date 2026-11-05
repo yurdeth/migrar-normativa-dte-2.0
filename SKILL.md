@@ -642,7 +642,8 @@ checklist. Resumen del orden que funcionó:
    reproducible en ambiente 00 con un flujo CLI que siga los mismos endpoints
    que la vista (venta insertar → creaJsonDTe → envío → save_response_mh; eret
    guardar_evento → generar_eret).
-   `d0ad9de` — modal de reenvío de DTE (guía §1.12, HEAD del origen): endpoint
+   `3aa8db1` — NC con items exentos (guía §1.13, HEAD del origen): portar SIEMPRE el commit completo (no dividir el precio del exento en `notacredito`, `getResumenNC` suma `totalExenta` al `montoTotalOperacion`, saldo de devoluciones excluye anuladas escribiendo `devoluciones.id_factura_dev`). Las devoluciones históricas NO se backfillean: quedan con `id_factura_dev=0` y conservan su conteo histórico (lo antiguo queda como está); el UPDATE es reparación MANUAL caso por caso, solo cuando el documento generador se conoce con certeza (p. ej. NCs de prueba del propio port). Prueba de cierre: NC mixta exenta/gravada con retención en ambiente 00 y segunda devolución tras anular la primera.
+   `d0ad9de` — modal de reenvío de DTE (guía §1.12): endpoint
    `enviar_correo_dte.php` + ítem "Reenviar DTE" + `tipoDTE()` en `_helpers`
    (verificar colisión de nombre) + rework del bloque de correo de
    `dte_factura_pdf.php` (destinatario/CC del modal, validación, respuesta JSON
@@ -1002,7 +1003,7 @@ DESPUÉS qué recuperar. Método:
    post-port de generadores PDF (arriba),
    y las decisiones pendientes del cliente.
    Este registro es lo que permite auditar y replicar en el siguiente sistema.
-2. Pruebas del usuario en ambiente 00 (`DTE_ENVIRONMENT=00`): COF mostrador, CCF,
+2. Pruebas del usuario en ambiente 00 (`DTE_ENVIRONMENT=00`): COF mostrador, CCF, NC sobre venta (INCLUIR SIEMPRE una NC mixta exenta/gravada con retención: con gravados puros los defectos de `3aa8db1` pasan por accidente),
    NC sobre venta, FSE, anulación de cada tipo (con marca de agua en PDF),
    consulta DTE, evento retorno, envío de correo por TODAS sus rutas (automático
    al aceptar, automático al anular, botón manual, modal de reenvío si existe),
