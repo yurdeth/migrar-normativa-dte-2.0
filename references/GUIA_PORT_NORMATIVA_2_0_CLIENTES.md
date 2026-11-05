@@ -332,6 +332,47 @@ precioUni` exacto, `montoTotalOperacion = te + tg + iva`, `totalPagar = mto
 
 ---
 
+### 1.14 Identidad de cálculo del cuerpo CCF/NC + descuento prorrateado en NC (`64a1dac`, 2026-11-05 — HEAD del origen)
+
+Dos caras del mismo defecto de fondo: el cuerpo del DTE no cuadraba con lo
+que MH recalcula, y la NC ignoraba los descuentos de la factura base.
+Portar SIEMPRE, y los 3 archivos (`clases/Dte.php`, `notacredito.php`,
+`js/funciones/notacredito.js`) JUNTOS: el cuerpo sin el prorrateo deja la
+NC emitiendo totales inflados, y el prorrateo sin el cuerpo hace que la
+primera NC con desc y cantidad>1 choque con `CALCULO INCORRECTO`.
+
+| Parte | Defecto | Corrección |
+|---|---|---|
+| `getCuerpoCCF` | Ítem EXENTO con descuento: `montoDescu` dividía entre 1.13 pero `ventaExenta` restaba el descuento completo → identidad rota (MH: `[cuerpoDocumento.item.N] CALCULO INCORRECTO`; se replica con CUALQUIER exento con desc de ítem, cualquier cantidad). Ítem GRAVADO con cantidad alta: `ventaGravada` venía del subtotal de BD mientras `precioUni` se publica redondeado a 4 dec → el drift por unidad se amplifica con la cantidad (con cantidad 1 pasa inadvertido) | Exento: `montoDescu` sin dividir. Gravado: `ventaGravada = round(cantidad × precioUni − montoDescu, 4)` derivada de los campos redondeados del cuerpo; el drift sub-centavista no afecta el resumen (2 dec) |
+| `getCuerpoNC` | Mismo patrón + `montoDescu` del gravado SIN dividir aunque el precio se publica neto | Gravado tipo 1: `montoDescu = desc/1.13`; `ventaGravada` derivada igual que CCF |
+| `getResumenNC` | `totalDescu` dividía entre 1.13 | Sin dividir: la NC guarda `factura.descuento` NETO (suma de los `montoDescu` del cuerpo), que es lo que MH cuadra contra el resumen |
+| `notacredito.php` + `notacredito.js` | La NC recalculaba `cantidad × precio` SIN el descuento del ítem base → al devolver el total, la NC superaba la base (MH: `[resumen.totalGravada] MONTO ES MAYOR AL DOCUMENTO RELACIONADO`). Con devoluciones parciales menores al total−desc no se notaba | Hidden `#descuento_item` por fila (el SELECT de `initial()` trae `factura_detalle.descuento` en AMBAS ramas del UNION producto/servicio); `subtotalConDescuento()` prorratea `desc_base × (cant_dev/cant_vend)` (gravado neto /factorIVA, exento sin dividir) en el keyup de `#cant`, `total()` y el builder de `#btnGuardar`; columna visible "Desc. a devolver" + fila "Tot. Descuento"; se persisten `factura_detalle.descuento` y `factura.descuento` neto (vía `&descuento_dev=`) |
+
+**Detalles de port (verificados en un port real):**
+
+- **`subtotalConDescuento()` y `descFilaVisible()` van a TOP-LEVEL en el JS**
+  (fuera del `$(document).ready`): `total()` vive fuera del closure y las
+  llama — definidas dentro del ready revientan con `ReferenceError` en
+  runtime con `node --check` en verde. El builder de `#btnGuardar` necesita
+  SU PROPIO factor IVA (`porc_iva` + 1): el de `total()` no está en su scope.
+- **Multi-lote:** cuando la fila es por lote, el desc base se reparte por la
+  fracción del lote (`desc × lote.cant/cantidad_total`) antes del prorrateo,
+  o un ítem partido en varios lotes se descuenta doble.
+- **Si el destino tiene su propia query de filas en `initial()`**, verificar
+  que agregue `factura_detalle.descuento` en las DOS ramas del UNION; un
+  hidden en `0` silencia el fix sin ningún error visible.
+- La columna "Desc. a devolver" y la fila "Tot. Descuento" no son cosmética:
+  son la conciliación visual contra la factura base (el total de la NC debe
+  caer exactamente al total de la base al devolver el 100%).
+- Reglas MH que motivan todo: `resumen.totalGravada` de la NC NO supera el
+  del documento relacionado, y cada ítem cumple
+  `venta* == cantidad×precioUni − montoDescu` con los valores publicados.
+- Prueba ambiente 00 que destapa el defecto sin fij: CCF y NC sobre una
+  venta con descuento por ítem, mezclando un exento con desc y un gravado
+  con desc y cantidad ≥ 100.
+
+---
+
 ## 2. COMMITS NO NORMATIVOS DETECTADOS (no portar por defecto)
 
 Trazados con `git log -S`. Están en el rango temporal o cerca, pero NO son normativa:
@@ -446,4 +487,5 @@ destinos tienen dos archivos casi idénticos: `venta.php` (sin DTE automático) 
 - [ ] **Correcciones de coherencia del origen mitigadas y reportadas**: defectos de lógica verificados que venían en el código del origen se arreglaron en el destino (no se copiaron), quedaron en la sección "Correcciones de coherencia lógica aplicadas (no normativas)" del registro, y se enumeraron al usuario en el informe final con recomendación de replicarlos en el origen
 - [ ] `venta2.php` clasificado (en uso / residuo); si en uso, cambios de venta aplicados en ambos archivos sin unificar
 - [ ] NC con items exentos (`3aa8db1`, §1.13): notacredito no divide exentos (cuerpo y prefill), `getResumenNC` suma `totalExenta` al montoTotalOperacion, saldo de devoluciones excluye anuladas (`id_factura_dev` escrito; el histórico NO se backfillea — decisión del usuario). Prueba ambiente 00: NC mixta exenta/gravada con retención + segunda devolución tras anular la primera
+- [ ] Identidad cuerpo CCF/NC + descuento prorrateado en NC (`64a1dac`, §1.14): los 3 archivos juntos (Dte.php, notacredito.php, notacredito.js); helpers JS a top-level; `factura_detalle.descuento` en las 2 ramas del UNION de `initial()`; Prueba ambiente 00: CCF y NC sobre venta con desc por ítem (un exento con desc + un gravado con desc y cantidad ≥ 100) — la NC total debe caer al total de la base
 - [ ] Pruebas ambiente 00 del checklist §4.6
