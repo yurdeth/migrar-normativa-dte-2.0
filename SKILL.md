@@ -586,6 +586,27 @@ checklist. Resumen del orden que funcionó:
      cargar la página, con variables sin definir, y `node --check` pasa igual.
      Sintaxis verde ≠ bloque vivo: señalar en el registro archivo y línea donde
      el bloque quedó materializado DENTRO de su función.
+   - **MODO DE PARSING PHP/HTML (regla general, aplica a TODO el port):**
+     antes de insertar cualquier código en un archivo mixto HTML/PHP,
+     verificar el MODO DE PARSING del punto de inserción. Los footers, vistas
+     y helpers de plantilla abren en PHP y CIERRAN la etiqueta (`?>`) para
+     emitir HTML: un ancla de texto tipo `</body></html>` cae casi siempre en
+     contexto HTML, y pegar código PHP ahí lo emite como TEXTO LITERAL al
+     navegador (ocurrió en un port real, 2026-11-05: el include de
+     `aviso_suscripcion.php` quedó como texto visible en los 3 footers; el
+     bloque se documentaba como "portado" y ni el usuario lo detectó de
+     inmediato porque el aviso estaba DESACTIVADO). Reglas derivadas:
+     (a) al insertar PHP en un archivo que contiene `?>`, determinar si el
+     ancla está antes o después del último cierre de etiqueta y envolver en
+     `<?php ... ?>` cuando corresponda (el propio commit de origen indica el
+     modo: si su contexto tiene tags PHP, copiarlos también);
+     (b) `php -l` NO detecta este defecto (el archivo sigue siendo PHP
+     válido: el texto literal es HTML de salida legítima) — es el gemelo PHP
+     del error 21b de la guía; y
+     (c) verificación de cierre del port: para CADA hunk añadido a archivos
+     con HTML, re-simular el modo de parsing línea a línea (estado
+     `<?php`/`?>`) y confirmar que las líneas añadidas caen en el modo
+     esperado. Un script de 15 líneas sobre `git diff` basta.
 4. Opcionales que el usuario de este flujo suele querer: preguntar explícitamente
    si porta el **correo en modal de pago** (commit `7c8d0e5`; en sistemas con
    modal de pago propio, revisar su estructura antes de insertar el campo) y el
