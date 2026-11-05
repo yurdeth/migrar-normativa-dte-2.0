@@ -33,6 +33,29 @@ Por lo tanto:
 
 **Herramienta:** `db/sync_schema.php` genera el SQL de estructura comparando dumps: `php db/sync_schema.php <dump_origen> <dump_destino> > out.sql`. Solo agrega tablas/columnas faltantes (nunca corrige definiciones existentes ni datos). **La salida del sync_schema NO se poda** (decisión del usuario, 2026-10-28): el .sql final conserva TODO lo que el script genere — tablas y columnas de features no normativas del origen incluidas — y solo se le añaden los bloques aditivos (corrección de catálogos MH, INSERTs de `modulo`, datos correctores). Quitar esquema es decisión manual del usuario sobre el archivo recibido; el error de podar una columna que el código portado lee es asimétrico (producción rota en el primer flujo que la toque — lección real 2026-10-28: PDF fatal por `Unknown column 'lotes'` y notices de giros 2/3 tras una poda "por evidencia" con grep incompleto). Además existen `db/actualizacion_mh.sql` (estructura + catálogos MH, para sistemas sin el paquete) y `db/actualizacion_mh_solo_datos.sql` (solo datos, idempotente por `ON DUPLICATE KEY UPDATE`) — usar el de solo_datos cuando el sync_schema ya llevó la estructura. **Verificar el catálogo del destino antes de asumir**: si `municipioMH` ya tiene Cabañas Este/Oeste con códigos 10/11 y `distritoMH` mapea el este→10/oeste→11, no necesita actualizacion_mh.
 
+**Regla para los INSERT del out.sql que rellenan `unique_id` (convención del sistema, NO usar `UUID()` de MySQL):** el destino crea sus `unique_id` desde la función `insert` de PHP, no desde la BD:
+
+```php
+if ($row["Field"] =="unique_id") {
+    $form_data['unique_id']=uniqid("S", true);
+}
+```
+
+Es decir: `uniqid("S", true)` — prefijo `"S"` + 13 hex + `.` + microsegundos con more_entropy. Para generar el valor se usa el CLI de PHP de quien ejecuta la skill (un valor POR FILA — es un identificador único, no se reutiliza el mismo entre INSERTs):
+
+```
+php -r 'echo uniqid("S", true);'
+```
+
+y el resultado se inyecta como LITERAL en el INSERT (sin llamadas a funciones SQL):
+
+```sql
+INSERT INTO `modulo` (`id_server`, `unique_id`, `id_modulo`, `id_menu`, `nombre`, `descripcion`, `filename`, `mostrarmenu`)
+VALUES (0, 'S691234567890a1.82345607', 210, 5, 'Descargar Factura JSON', 'Generar el JSON de una factura específica', 'descarga_dte_json.php', 0);
+```
+
+Aplica a todo INSERT del out.sql cuya tabla tenga columna `unique_id` (modulo, factura, devoluciones, etc.): nada de `UUID()`, nada de `UUID()` disfrazado — el valor viaja pre-generado desde PHP.
+
 **Nota clave sobre `distritoMH.id_municipio`:** guarda el **CÓDIGO del municipio (CAT-013)**, no el `id` de la tabla `municipioMH` (ej. Cuscatlán Norte = codigo 17 = id 26). Verificar siempre bajo esa semántica.
 
 **Verificación completa del catálogo (obligatoria, Cabañas es solo la muestra).** El chequeo de Cabañas Este/Oeste detectó UN caso de ids cruzados; el mismo tipo de error (códigos intercambiados entre municipios hermanos, `id_municipio` apuntando al municipio equivocado) puede existir en cualquier otra fila y la muestra no lo ve. Cuando el destino YA tiene `distritoMH`/`municipioMH`/`paisesMH`, comparar fila a fila contra el dump de origen (fuente de verdad), keyed por `id`: `distritoMH` ~263 filas (`codigo`, `nombre`, `id_departamento`, `id_municipio`), `municipioMH` (`codigo`, `nombre`, departamento) y `paisesMH` (`codigo`, `nombre`). Método: extraer el bloque `INSERT INTO \`<tabla>\`` de ambos dumps y hacer diff normalizado. Divergencia encontrada = el origen manda como contenido y el `id` manda como clave: UPDATE puntual AGREGADO AL FINAL del dump de salida (el out.sql debe quedar autocontenido: estructura + datos correctores en un solo archivo), o el bloque equivalente de `actualizacion_mh_solo_datos.sql` (idempotente) concatenado al mismo out.sql, y anotar cada corrección en el registro. Si el destino no tenía las tablas, no aplica: nacen del catálogo del origen.
@@ -347,7 +370,7 @@ Verificar antes de tocar: varios de estos diffs entre repos son features ajenas.
 
 ## 4. FLUJO DE EJECUCIÓN (orden que funcionó)
 
-1. **BD:** backup → tablas `evento`/`evento_detalle` si faltan → regenerar dump de referencia → `sync_schema.php` → SQL resultante (estructura) → verificar catálogos MH (Cabañas 10/11) → `actualizacion_mh_solo_datos.sql` solo si los catálogos del destino están viejos. **Extras de menú/permisos en el out.sql:** antes de dar por bueno el SQL de salida, verificar contra la BD del destino los registros de `modulo` que el port trae nuevos (p. ej. `descarga_dte_json.php`, ver §1.8 `f996452`): si faltan, agregar su INSERT al final del out.sql resolviendo el `id_menu` contra la BD del destino.
+1. **BD:** backup → tablas `evento`/`evento_detalle` si faltan → regenerar dump de referencia → `sync_schema.php` → SQL resultante (estructura) → verificar catálogos MH (Cabañas 10/11) → `actualizacion_mh_solo_datos.sql` solo si los catálogos del destino están viejos. **Extras de menú/permisos en el out.sql:** antes de dar por bueno el SQL de salida, verificar contra la BD del destino los registros de `modulo` que el port trae nuevos (generando sus `unique_id` con `uniqid("S", true)` vía PHP CLI e inyectados como literal — ver regla en §1.1, nunca `UUID()` de SQL) (p. ej. `descarga_dte_json.php`, ver §1.8 `f996452`): si faltan, agregar su INSERT al final del out.sql resolviendo el `id_menu` contra la BD del destino.
 2. **Copias completas** (con diff previo): clases core, endpoints nuevos, JS nuevos, `_utiles.php` (o merge), `factForm.php`, `dte_fse_pdf.php`.
 3. **Merges selectivos:** `_helpers.php` → `generar_dte.php` → admins → `venta.php`/`venta.js` → `getAuth.js` → `dte_factura_pdf.php`.
 4. **Distritos:** frontend de los 4 frentes (adaptando al JS real de cada formulario) + guardado en backend.
