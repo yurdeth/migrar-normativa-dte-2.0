@@ -393,6 +393,7 @@ ordenada por parámetro) y esperar todas las respuestas antes de continuar.
     hacia MH, se detiene ahí y se re-scopea, no se "ya que estoy, termino".
 
   **PERMITIDO (lo lógico: verificar que todo lo que existe funcione en cadena):**
+  - En archivos destino SIN contraparte en el origen (p. ej. un generador PDF propio del cliente) donde la normativa exige añadir un elemento visual nuevo (marca de agua, leyenda, sello): NO improvisar el diseño. Espejar LITERALMENTE el equivalente visual del origen (marcaAguaAnulado/marcaAguaRetorno: gris 220, fuente 90, Rotate 30, sello debajo) para que el documento se vea idéntico al de referencia, y jamás anotar en comentarios ni en el registro "equivalente del origen" si no se copió literal (falsedad documental: el siguiente port confiaría en esa nota).
   - Ejecutar por CLI/HTTP local los CALCULADORES puros: `getCuerpoCOF/CCF/NC`,
     `getResumen*`, `getIdentificacionDte`, `getReceptor*`, `getEmisor`,
     `getFacturaPagoTipo`, `getDocRelacionado` — y verificar los VALORES que
