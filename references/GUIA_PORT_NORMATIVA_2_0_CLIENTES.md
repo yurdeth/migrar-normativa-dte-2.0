@@ -373,7 +373,7 @@ primera NC con desc y cantidad>1 choque con `CALCULO INCORRECTO`.
 
 ---
 
-### 1.15 Mensajes personalizados MH + validacion temprana de distrito + guard de token (`453cf0a` + merge `6747dda4`, 2026-11-05 — HEAD del origen)
+### 1.15 Mensajes personalizados MH + validacion temprana de distrito + guard de token (`453cf0a` + merge `6747dda4`, 2026-11-05)
 
 Robustez/UX del flujo DTE ligada al frente de distritos. Portar SIEMPRE
 junto con el rango (los rechazos que personaliza son los que el propio port
@@ -420,6 +420,15 @@ DUI/Giro y `aee0b71` lo mueve a assets/json — copiar con su subcarpeta), `_hel
 - Diferencia con §1.13/§1.14: este commit NO toca el calculo del cuerpo; es
   UX de errores + guard de token + validacion temprana. Puede portarse
   despues del rango sin conflictos.
+
+---
+
+### 1.16 Formulario de compras por JSON + mensajes MH de receptor (`81a21a7`, `b216e9d7`, `a015af67`)
+
+| Commit | Que trae | Port |
+|---|---|---|
+| `81a21a7` | Formulario de compras por archivo JSON: `compras_json.php` + `js/funciones/compras_json.js` (ambos NUEVOS, sin contraparte en los destinos). Carga toda la info de una compra desde un JSON: proveedor por similitud (`cj_match_*`), items con match de producto/equivalencias, validacion de documento. **Funcionalidad APARTE** — no se relaciona con el catalogo `mh_mensajes.json` | Archivos nuevos = port directo, PERO con **auditoria dual** contra el esquema de compras del destino ANTES de copiar: las funciones `cj_*` consultan `compra`, `compra_detalle`, `presentacion_producto` y equivalencias por SQL plano — cada columna referenciada debe existir en el destino o adaptarse por semantica de datos. Crea su propia tabla `producto_proveedor_codigo` con `CREATE TABLE IF NOT EXISTS` (autonoma, sin migracion manual). El JS apunta a `compras_json.php` (URL) y `compras.php` (URL_COMPRAS): verificar que ambos existan en el destino, que `permission_usr` use el nombre del propio script y agregar el punto de menu |
+| `60ed2bf`, `b216e9d7`, `a015af67` | **UNA SOLA feature en evolucion** (junto con `453cf0a`, §1.15): contenido puro del `mh_mensajes.json`. `60ed2bf` agrega entradas DUI/Giro; `b216e9d7` cambia pronombre Cliente→Receptor en `receptor_distrito` (titulo y mensaje, cubre cliente O proveedor) y `receptor_municipio` (titulo); `a015af67` agrega entrada `receptor_telefono` (patron `RECEPTOR/TELEFONO`). La base `453cf0a` creo el JSON en raiz con TODA la logica PHP/JS, y `aee0b71` movio el archivo a `assets/json/` actualizando `_helpers.php` y `util.js` | Port literal del JSON: aplicar TODAS las entradas (DUI/Giro + pronombres Receptor + telefono) al archivo del destino, en la ubicacion donde el §1.15 lo dejo — los 3 commits de contenido aplican igual a raiz o a `assets/json/`, es el mismo archivo. Si el destino se porta de cero, copiar el archivo final del HEAD del origen y las entradas ya viajan incluidas |
 
 ## 2. COMMITS NO NORMATIVOS DETECTADOS (no portar por defecto)
 
@@ -541,4 +550,6 @@ destinos tienen dos archivos casi idénticos: `venta.php` (sin DTE automático) 
 - [ ] NC con items exentos (`3aa8db1`, §1.13): notacredito no divide exentos (cuerpo y prefill), `getResumenNC` suma `totalExenta` al montoTotalOperacion, saldo de devoluciones excluye anuladas (`id_factura_dev` escrito; el histórico NO se backfillea — decisión del usuario). Prueba ambiente 00: NC mixta exenta/gravada con retención + segunda devolución tras anular la primera
 - [ ] Identidad cuerpo CCF/NC + descuento prorrateado en NC (`64a1dac`, §1.14): los 3 archivos juntos (Dte.php, notacredito.php, notacredito.js); helpers JS a top-level; `factura_detalle.descuento` en las 2 ramas del UNION de `initial()`; Prueba ambiente 00: CCF y NC sobre venta con desc por ítem (un exento con desc + un gravado con desc y cantidad ≥ 100) — la NC total debe caer al total de la base
 - [ ] Mensajes personalizados MH + guard de token (`453cf0a`, §1.15): `mh_mensajes.json` copiado y servido público (fetch 200 directo), `util.js` incluido en TODA página que cargue getAuth/dte_auto/venta* (grep), guard de token en ambos JS, validación temprana de distrito de sucursal activa (probar con una sucursal en 0 → excepción accionable, no rechazo MH)
+- [ ] Catálogo `mh_mensajes.json` completo (§1.15 + §1.16): entradas base (distrito/municipio/token) + DUI/Giro (`60ed2bf`) + pronombres Receptor (`b216e9d7`) + `receptor_telefono` (`a015af67`) — el JSON final del HEAD del origen como referencia
+- [ ] Formulario de compras por JSON (`81a21a7`, §1.16): auditoría dual del esquema `cj_*` contra el destino, tabla `producto_proveedor_codigo` creada, menú/permiso dados de alta y `compras.php` resolviendo
 - [ ] Pruebas ambiente 00 del checklist §4.6

@@ -581,8 +581,13 @@ continuo, ejecuta las fases en orden y reporta al final de cada una.
 
 ## FASE 2 — Port de código (selectivo, por commit)
 
-Leer `references/GUIA_PORT_NORMATIVA_2_0_CLIENTES.md` completo y seguirla como
-checklist. Resumen del orden que funcionó:
+   Leer `references/GUIA_PORT_NORMATIVA_2_0_CLIENTES.md` completo y seguirla como
+   checklist. Antes de empezar, verificar contra el HEAD actual del origen que no
+   haya commits nuevos fuera del rango documentado (regla de "revisar del último
+   commit portado hacia arriba"). Al portar funciones, aplicar la regla de
+   **auditoría dual** del final de este documento (regla obligatoria, no opcional:
+   sustituir código del origen por helpers del destino sin la auditoría es
+   defecto). Resumen del orden que funcionó:
 
 1. Copias completas (CON diff previo para confirmar que no hay código propio del
    destino dentro): `clases/Dte.php`, `clases/EventoDte.php`, `clases/FacturaPago.php`,
@@ -737,7 +742,9 @@ checklist. Resumen del orden que funcionó:
    en `output=file` con `ob_start`) + handlers `#btnSendMail`/`#btnSaveEmail`
    en `getAuth.js`. Sin el refactor cosmético de índices `dt` del admin; rama
    CRE muerta documentada (el archivo al que apunta no existe ni en el origen).
-7b. `453cf0a` + merge `6747dda4` — mensajes personalizados MH + validación temprana de distrito + guard de token (guía §1.15, HEAD del origen): portar junto con el rango. `assets/json/mh_mensajes.json` NUEVO (público, el JS lo hace fetch sin sesión; `aee0b71` lo mueve a assets/json), `mensajePersonalizadoMH` PHP en `_helpers.php` (alcanza vía `_core`), validación temprana de sucursal sin distrito en `Dte.php`, guard de token undefined/"undef" en getAuth/dte_auto (antes el forEach de observaciones reventaba en silencio), Swal persistente desde `util.js` — **verificar con grep que cada página que carga getAuth/dte_auto/venta* llegue a un include de `util.js`** (en el origen lo traen footer.php/footer2.php). Los 4 JS van por ANCLAS (los destinos tienen versiones propias). Sin conflicto con §1.13/§1.14: este commit no toca el cálculo del cuerpo.
+   7b. `453cf0a` + merge `6747dda4` — mensajes personalizados MH + validación temprana de distrito + guard de token (guía §1.15): portar junto con el rango. `assets/json/mh_mensajes.json` NUEVO (público, el JS lo hace fetch sin sesión; `aee0b71` lo mueve a assets/json), `mensajePersonalizadoMH` PHP en `_helpers.php` (alcanza vía `_core`), validación temprana de sucursal sin distrito en `Dte.php`, guard de token undefined/"undef" en getAuth/dte_auto (antes el forEach de observaciones reventaba en silencio), Swal persistente desde `util.js` — **verificar con grep que cada página que carga getAuth/dte_auto/venta* llegue a un include de `util.js`** (en el origen lo traen footer.php/footer2.php). Los 4 JS van por ANCLAS (los destinos tienen versiones propias). Sin conflicto con §1.13/§1.14: este commit no toca el cálculo del cuerpo.
+   7c. `81a21a7` — formulario de compras por archivo JSON (guía §1.16): `compras_json.php` + `js/funciones/compras_json.js` (ambos NUEVOS en el origen, sin contraparte en los destinos): carga toda la info de una compra desde un JSON (proveedor por similitud `cj_match_*`, items con match de producto/equivalencias, validación de documento). Port directo (archivos nuevos) PERO con auditoría dual contra el esquema de compras del destino ANTES de copiar: las funciones `cj_*` consultan tablas/columnas (`compra`, `compra_detalle`, `presentacion_producto`, equivalencias) por SQL plano — cada columna referenciada debe existir en el destino o adaptarse por semántica de datos. Crea su propia tabla `producto_proveedor_codigo` con `CREATE TABLE IF NOT EXISTS` (autónoma, sin migración SQL manual). El JS apunta a `compras_json.php` (URL) y `compras.php` (URL_COMPRAS): verificar que ambos existan en el destino y que `permission_usr` use el nombre del propio script. Requiere el punto de menú correspondiente.
+   7d. `60ed2bf` + `b216e9d7` + `a015af67` — evolución del catálogo `mh_mensajes.json` (guía §1.15/§1.16): contenido PURO del JSON, una sola feature que evoluciona por cadena con la base `453cf0a` (§7b): `453cf0a` la crea (JSON en raíz + toda la lógica PHP/JS), `60ed2bf` agrega las entradas DUI/Giro, `aee0b71` mueve el archivo de la raíz a `assets/json/` (actualizando las 2 referencias: `_helpers.php` y `util.js`), `b216e9d7` cambia el pronombre Cliente→Receptor en `receptor_distrito` (título y mensaje, ahora cubre cliente O proveedor) y `receptor_municipio` (título), y `a015af67` agrega la entrada `receptor_telefono` (patrón `RECEPTOR/TELEFONO` — guía para teléfono inválido/ausente del receptor). Port literal del JSON: aplicar TODAS las entradas al archivo del destino, en la ubicación donde el §7b lo dejó (los 3 commits de contenido aplican igual a raíz o a `assets/json/`, es el mismo archivo).
 8. **venta2**: aplicar la regla de `venta.php`/`venta2.php` de la sección "El
    criterio de parada" — detectar si venta2 está en uso o es residuo y, si está
    en uso, repetir en él todos los cambios de venta (sin unificar).
