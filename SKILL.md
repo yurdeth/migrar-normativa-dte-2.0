@@ -292,6 +292,44 @@ automático) y `venta2.php` (venta con DTE automático). Reglas:
 - **NUNCA unificar la lógica** en un solo archivo para imitar al origen: el
   destino nació partido y así se queda. Solo portar los cambios a cada parte.
 
+**Y el alcance funcional es igual para lo OBLIGATORIO que para lo opcional
+(port real, 2026-11-09):** el origen solo tiene `venta.php`, así que TODO lo
+que el port trae para el flujo de venta —normativo (observaciones DTE,
+distritos en `agregar_cliente`, periodo/plazo, ticketModal) u opcional
+aceptado (correo en modal de pago, `7c8d0e5`)— vive ahí. Pero eso dice DÓNDE
+vive EN EL ORIGEN, no dónde debe vivir en el destino. La pregunta que define
+el alcance de CUALQUIER cambio portado es funcional, no topográfica: **¿qué
+archivos del destino ejecutan ESTE flujo?** Si el destino factura por
+`venta.php` Y por `venta2.php` (Y por `preventa`, `venta3`, preventa
+convertida a factura...), dejar el cambio en uno solo significa que el
+operador que cobra por la otra ruta opera sin la normativa o sin la
+funcionalidad: para lo obligatorio es un módulo de venta emitiendo DTE viejos;
+para lo opcional, medio feature. Reglas derivadas:
+1. **El origen manda el QUÉ (comportamiento y commit); el destino manda el
+   DÓNDE** (los archivos en uso que realizan el flujo). Este principio es
+   general — el caso venta/venta2 de esta guía es UNA instancia, no el límite.
+   El mapa destino de cada feature de venta se determina con el mismo método
+   de clasificación de "en uso / residuo" ya definido arriba, aplicado a
+   TODOS los puntos de venta del destino (venta, venta2, preventa, venta3,
+   venta por lotes, etc.), no solo a los que la guía menciona por nombre.
+2. **La lista venta/venta2 de esta guía es el piso, no el techo.** Antes de
+   dar por cerrado el port de un cambio de venta, listar los puntos de venta
+   del destino (módulos del menú con filename tipo venta*/preventa*,
+   handlers de cobro, JS con `process: 'insert'` hacia endpoints de venta) y
+   clasificar cada uno. Cada archivo en uso recibe el cambio adaptado a su
+   estructura; el que sea residuo, se documenta con las evidencias del
+   método.
+3. **Feature opcional aceptado = feature completo en todas las rutas.** No se
+   pregunta "¿lo quieres también en venta2?" por separado: la aceptación del
+   cliente cubre el flujo completo; si alguna ruta del destino no puede
+   llevarlo (estructura muy distinta), eso se reporta como excepción con
+   evidencia, nunca se asume por defecto.
+4. La síntoma de este olvido es un gap de "lógica humana" (no de código): el
+   sistema sigue funcionando y nada revienta — simplemente el operador del
+   archivo B no tiene lo que el del archivo A sí (o factura sin la
+   normativa). Al cerrar el port, para CADA cambio de venta responder:
+   "¿esto está presente ESTÉ DONDE ESTÉ cobrando?"
+
 **Equivalencias funcionales: cuando el archivo del origen no existe en el destino
 (regla general, aplica a CUALQUIER archivo, no solo a venta):**
 

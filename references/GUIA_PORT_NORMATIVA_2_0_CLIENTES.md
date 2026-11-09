@@ -529,6 +529,18 @@ destinos tienen dos archivos casi idénticos: `venta.php` (sin DTE automático) 
    `email_cliente`.
 3. NO unificar la lógica para imitar al origen. El destino nació partido; se
    porta el cambio, no la reorganización.
+4. **El alcance funcional aplica a TODO lo portado — obligatorio u opcional.**
+   El origen solo tiene `venta.php` en uso real, así que tanto la normativa (obs DTE,
+   distritos, periodo/plazo, ticketModal) como los opcionales aceptados
+   (correo en modal, `7c8d0e5`) viven ahí; pero eso es su layout, no el
+   alcance. El origen manda el QUÉ; el destino manda el DÓNDE: TODOS los
+   puntos de venta EN USO del destino reciben el cambio adaptado (normativo
+   incluido: un venta2/preventa sin portar es un punto que emite sin la
+   normativa). La lista venta/venta2 es el piso, no el techo: clasificar
+   también preventa*, venta3*, y cualquier otro módulo de cobro del destino.
+   Dejar un cambio en una sola ruta = operador sin normativa o sin feature
+   según por dónde cobre (lección real 2026-11-09). Detalle en SKILL.md,
+   sección "Venta del origen unificada vs venta partida".
 
 ---
 
