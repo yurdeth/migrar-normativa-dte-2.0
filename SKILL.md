@@ -61,6 +61,53 @@ el registro como decisión, y (c) reportada al usuario. Ninguna de las tres
 puede faltar. Un port lleno de "correcciones" no pedidas es un port roto:
 de nada sirve pasar código de un repo a otro si después no funciona.
 
+**Regla dura — adaptación justificada y verificada en runtime (port real,
+2026-11-09):** el origen manda QUÉ se porta (alcance y commit); la línea se
+porta VERBATIM por defecto. Adaptar una línea del origen (sustituir una
+función, cambiar `__DIR__` por otra cosa, "hacerla más robusta", generalizar
+un caso) exige el MISMO estándar que cualquier decisión del port: necesidad
+comprobada contra el código y el runtime REALES del destino. "Suena mejor",
+"así cubro un caso futuro" o "así es más robusto" NO son necesidad: son la
+señal de investigar, no de reescribir. Caso real: la nota del commit
+`fa74ff5` (§1.9 de la guía) — "basename(__DIR__) daría la subcarpeta... usar
+la ruta raíz" — se leyó como permiso para reescribir y se sustituyó
+`__DIR__` por `getcwd()`, sin verificar que en web SAPI `getcwd()` es el
+directorio del script EJECUTADO, no la raíz del proyecto → cada subdirectorio
+(`modals/`, `procesos/`, ...) calculaba un nombre de cookie de sesión distinto
+→ sesión siempre muerta en todos los XHR de subdirectorios, y el fallo ni
+siquiera tenía síntoma propio: se enmascaraba como redirect de login cuyo
+HTML (login → dashboard) quedaba pintado dentro de los modales. El origen
+tenía la línea correcta y funcionando. Reglas derivadas:
+
+1. **Las advertencias/notas de esta skill y de la guía son disparadores de
+   VERIFICACIÓN, nunca de reescritura.** Cuando una nota dice "ojo con X
+   caso", la acción obligatoria es comprobar si ese caso existe en el destino
+   y cómo lo resuelve el código del origen; si el origen ya lo resuelve, la
+   línea viaja tal cual.
+2. **Mecanismos con efecto FUERA del código** (cookies/sesión, headers HTTP y
+   redirects, rutas web relativas vs absolutas, resolución de `__DIR__`/
+   `getcwd()`/`$_SERVER`, permisos de archivos, rewrites de Apache): la
+   verificación estática (lint, trazas, pase de símbolos, matrices de
+   estados) NO los cubre por construcción. Todo cambio que los toque exige
+   una prueba de RUNTIME mínima ANTES del cierre del port, con el VALOR
+   RESUELTO visible por caso: para sesión, una petición real (o simulada
+   con `php -r`/curl local) desde CADA subdirectorio que ejecute el código,
+   comprobando que la identidad resuelta (nombre de cookie, sesión) es la
+   misma en todos; para un redirect, el destino final del header resuelto;
+   para una ruta relativa, la URL final para un endpoint por cada nivel de
+   profundidad. La tabla "caso → valor resuelto" va en el registro.
+3. **Si el modo de falla de un cambio es silencioso o se enmascara como otro
+   síntoma** (un 404, HTML inyectado donde se esperaba otro contenido,
+   "funciona pero raro"), la verificación obligatoria de ese cambio sube de
+   nivel: de estática a de comportamiento, aunque el resto del port sea
+   solo-lógico. Esto no contradice la regla solo-lógica: son pruebas locales
+   (curl/CLI contra el propio destino), sin MH ni certificados.
+4. **La decisión se documenta en el registro como el origen lo declara:** qué
+   línea del origen viaja verbatim, qué se adaptó, con qué evidencia del
+   destino se justificó la adaptación y qué prueba de runtime la validó. Una
+   adaptación sin los tres elementos es un defecto pendiente, no una
+   decisión.
+
 **Regla específica: el archivo del API key de correo vive UN NIVEL ENCIMA del
 directorio del proyecto.** `obtener_api_key.php` NO está dentro del repo
 `dte_testing` ni del destino: es un archivo compartido en la carpeta padre que
