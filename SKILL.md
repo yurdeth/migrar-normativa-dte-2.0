@@ -790,10 +790,17 @@ continuo, ejecuta las fases en orden y reporta al final de cada una.
    la lista de archivos del origen. Junto con esa, portar también `fc521e34`
    (guard en `login.php`: con sesión activa redirigir a `dashboard.php` en vez
    de dejar reloguear). De la guía §1.9, portar también el **aviso de
-   suscripción pendiente** (`47942220`+`f67299bc`): SIEMPRE y sin preguntar,
-   en su estado final DESACTIVADO (`'activo' => false`), incluyendo la carpeta
-   `assets/img/` con sus imágenes y verificando con `ls` que llegaron al
-   destino (detalle en la fila de la guía). Igualmente portar `4f5e25c6`
+   suscripción pendiente** (`47942220`+`f67299bc` y su evolución `6bfe423`):
+   SIEMPRE y sin preguntar, en su estado final DESACTIVADO
+   (`'activo' => false`), incluyendo la carpeta `assets/img/` con sus imágenes
+   y verificando con `ls` que llegaron al destino (detalle en las filas de la
+   guía). El estado final del archivo trae la detección de pestaña duplicada
+   (identidad por `window.name` + tipo de navegación/referrer, en ESE orden:
+   el referrer llega clonado al duplicar) y el botón "Entendido" blindado
+   (span fantasma no interactivo + botón real creado solo al vencer la cuenta
+   + vigilante `MutationObserver` que reinstala el modal borrado/oculto sin
+   reiniciar la espera; filosofía del aviso: hostigar sin bloquear nunca el
+   uso del sistema). Igualmente portar `4f5e25c6`
    (fix COF con retención: `montoTotalOperacion` bruto en `getResumenCOF`).
 7. Commits recientes con decisión de adaptación (guía §1.10 post-rango y
    §1.11): `6007e66` — ERET con productos loteados. **Verificar ANTES en el
@@ -830,6 +837,11 @@ continuo, ejecuta las fases en orden y reporta al final de cada una.
    7b. `453cf0a` + merge `6747dda4` — mensajes personalizados MH + validación temprana de distrito + guard de token (guía §1.15): portar junto con el rango. `assets/json/mh_mensajes.json` NUEVO (público, el JS lo hace fetch sin sesión; `aee0b71` lo mueve a assets/json), `mensajePersonalizadoMH` PHP en `_helpers.php` (alcanza vía `_core`), validación temprana de sucursal sin distrito en `Dte.php`, guard de token undefined/"undef" en getAuth/dte_auto (antes el forEach de observaciones reventaba en silencio), Swal persistente desde `util.js` — **verificar con grep que cada página que carga getAuth/dte_auto/venta* llegue a un include de `util.js`** (en el origen lo traen footer.php/footer2.php). Los 4 JS van por ANCLAS (los destinos tienen versiones propias). Sin conflicto con §1.13/§1.14: este commit no toca el cálculo del cuerpo.
    7c. `81a21a7` — formulario de compras por archivo JSON (guía §1.16): `compras_json.php` + `js/funciones/compras_json.js` (ambos NUEVOS en el origen, sin contraparte en los destinos): carga toda la info de una compra desde un JSON (proveedor por similitud `cj_match_*`, items con match de producto/equivalencias, validación de documento). Port directo (archivos nuevos) PERO con auditoría dual contra el esquema de compras del destino ANTES de copiar: las funciones `cj_*` consultan tablas/columnas (`compra`, `compra_detalle`, `presentacion_producto`, equivalencias) por SQL plano — cada columna referenciada debe existir en el destino o adaptarse por semántica de datos. Crea su propia tabla `producto_proveedor_codigo` con `CREATE TABLE IF NOT EXISTS` (autónoma, sin migración SQL manual). El JS apunta a `compras_json.php` (URL) y `compras.php` (URL_COMPRAS): verificar que ambos existan en el destino y que `permission_usr` use el nombre del propio script. Requiere el punto de menú correspondiente.
    7d. `60ed2bf` + `b216e9d7` + `a015af67` — evolución del catálogo `mh_mensajes.json` (guía §1.15/§1.16): contenido PURO del JSON, una sola feature que evoluciona por cadena con la base `453cf0a` (§7b): `453cf0a` la crea (JSON en raíz + toda la lógica PHP/JS), `60ed2bf` agrega las entradas DUI/Giro, `aee0b71` mueve el archivo de la raíz a `assets/json/` (actualizando las 2 referencias: `_helpers.php` y `util.js`), `b216e9d7` cambia el pronombre Cliente→Receptor en `receptor_distrito` (título y mensaje, ahora cubre cliente O proveedor) y `receptor_municipio` (título), y `a015af67` agrega la entrada `receptor_telefono` (patrón `RECEPTOR/TELEFONO` — guía para teléfono inválido/ausente del receptor). Port literal del JSON: aplicar TODAS las entradas al archivo del destino, en la ubicación donde el §7b lo dejó (los 3 commits de contenido aplican igual a raíz o a `assets/json/`, es el mismo archivo).
+   7e. `5682cc14` — PDF de factura con nombre del cliente manual (guía §1.17): en `headerEmisorReceptor` de
+   `dte_factura_pdf.php` la línea "CLIENTE :" prefiere `factura.extra_nombre` (nombre tipeado a mano al vender,
+   columna legacy de la venta) con fallback al nombre de la ficha. Una línea dentro del merge del PDF (paso 1);
+   verificar contra el destino si su captura de nombre manual vive en otro campo (mapear por ancla) o no existe
+   (la línea queda inocua, portar igual para alinear con el origen).
 8. **venta2**: aplicar la regla de `venta.php`/`venta2.php` de la sección "El
    criterio de parada" — detectar si venta2 está en uso o es residuo y, si está
    en uso, repetir en él todos los cambios de venta (sin unificar).
