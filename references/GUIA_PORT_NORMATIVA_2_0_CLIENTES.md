@@ -296,7 +296,7 @@ automático ni al viejo "Enviar PDF DTE" (`output=text`): conviven los tres.
 
 ---
 
-### 1.13 NC con items exentos: precio del cuerpo, montoTotalOperacion y saldo de devoluciones anuladas (`3aa8db1`, 2026-11-04 — HEAD del origen)
+### 1.13 NC con items exentos: precio del cuerpo, montoTotalOperacion y saldo de devoluciones anuladas (`3aa8db1`, 2026-11-04)
 
 Tres defectos ENCADENADOS que solo se destapan emitiendo una NC con
 items EXENTOS mezclados con gravados (con gravados puros los tres pasan
@@ -333,7 +333,7 @@ precioUni` exacto, `montoTotalOperacion = te + tg + iva`, `totalPagar = mto
 
 ---
 
-### 1.14 Identidad de cálculo del cuerpo CCF/NC + descuento prorrateado en NC (`64a1dac`, 2026-11-05 — HEAD del origen)
+### 1.14 Identidad de cálculo del cuerpo CCF/NC + descuento prorrateado en NC (`64a1dac`, 2026-11-05)
 
 Dos caras del mismo defecto de fondo: el cuerpo del DTE no cuadraba con lo
 que MH recalcula, y la NC ignoraba los descuentos de la factura base.
@@ -429,7 +429,7 @@ DUI/Giro y `aee0b71` lo mueve a assets/json — copiar con su subcarpeta), `_hel
 | Commit | Que trae | Port |
 |---|---|---|
 | `81a21a7` | Formulario de compras por archivo JSON: `compras_json.php` + `js/funciones/compras_json.js` (ambos NUEVOS, sin contraparte en los destinos). Carga toda la info de una compra desde un JSON: proveedor por similitud (`cj_match_*`), items con match de producto/equivalencias, validacion de documento. **Funcionalidad APARTE** — no se relaciona con el catalogo `mh_mensajes.json` | Archivos nuevos = port directo, PERO con **auditoria dual** contra el esquema de compras del destino ANTES de copiar: las funciones `cj_*` consultan `compra`, `compra_detalle`, `presentacion_producto` y equivalencias por SQL plano — cada columna referenciada debe existir en el destino o adaptarse por semantica de datos. Crea su propia tabla `producto_proveedor_codigo` con `CREATE TABLE IF NOT EXISTS` (autonoma, sin migracion manual). El JS apunta a `compras_json.php` (URL) y `compras.php` (URL_COMPRAS): verificar que ambos existan en el destino, que `permission_usr` use el nombre del propio script y agregar el punto de menu |
-| `60ed2bf`, `b216e9d7`, `a015af67` | **UNA SOLA feature en evolucion** (junto con `453cf0a`, §1.15): contenido puro del `mh_mensajes.json`. `60ed2bf` agrega entradas DUI/Giro; `b216e9d7` cambia pronombre Cliente→Receptor en `receptor_distrito` (titulo y mensaje, cubre cliente O proveedor) y `receptor_municipio` (titulo); `a015af67` agrega entrada `receptor_telefono` (patron `RECEPTOR/TELEFONO`). La base `453cf0a` creo el JSON en raiz con TODA la logica PHP/JS, y `aee0b71` movio el archivo a `assets/json/` actualizando `_helpers.php` y `util.js` | Port literal del JSON: aplicar TODAS las entradas (DUI/Giro + pronombres Receptor + telefono) al archivo del destino, en la ubicacion donde el §1.15 lo dejo — los 3 commits de contenido aplican igual a raiz o a `assets/json/`, es el mismo archivo. Si el destino se porta de cero, copiar el archivo final del HEAD del origen y las entradas ya viajan incluidas |
+| `60ed2bf`, `b216e9d7`, `a015af67` | **UNA SOLA feature en evolucion** (junto con `453cf0a`, §1.15): contenido puro del `mh_mensajes.json`. `60ed2bf` agrega entradas DUI/Giro; `b216e9d7` cambia pronombre Cliente→Receptor en `receptor_distrito` (titulo y mensaje, cubre cliente O proveedor) y `receptor_municipio` (titulo); `a015af67` agrega entrada `receptor_telefono` (patron `RECEPTOR/TELEFONO`). La base `453cf0a` creo el JSON en raiz con TODA la logica PHP/JS, y `aee0b71` movio el archivo a `assets/json/` actualizando `_helpers.php` y `util.js` | Port literal del JSON: aplicar TODAS las entradas (DUI/Giro + pronombres Receptor + telefono) al archivo del destino, en la ubicacion donde el §1.15 lo dejo — los 3 commits de contenido aplican igual a raiz o a `assets/json/`, es el mismo archivo. Si el destino se porta de cero, copiar el archivo JSON vigente en el origen (estado final de la cadena, con todas las entradas ya aplicadas) y las entradas ya viajan incluidas |
 
 ### 1.17 PDF de factura: nombre del cliente ingresado manualmente en venta (`5682cc14`, 2026-11-11)
 
@@ -577,7 +577,7 @@ destinos tienen dos archivos casi idénticos: `venta.php` (sin DTE automático) 
 - [ ] NC con items exentos (`3aa8db1`, §1.13): notacredito no divide exentos (cuerpo y prefill), `getResumenNC` suma `totalExenta` al montoTotalOperacion, saldo de devoluciones excluye anuladas (`id_factura_dev` escrito; el histórico NO se backfillea — decisión del usuario). Prueba ambiente 00: NC mixta exenta/gravada con retención + segunda devolución tras anular la primera
 - [ ] Identidad cuerpo CCF/NC + descuento prorrateado en NC (`64a1dac`, §1.14): los 3 archivos juntos (Dte.php, notacredito.php, notacredito.js); helpers JS a top-level; `factura_detalle.descuento` en las 2 ramas del UNION de `initial()`; Prueba ambiente 00: CCF y NC sobre venta con desc por ítem (un exento con desc + un gravado con desc y cantidad ≥ 100) — la NC total debe caer al total de la base
 - [ ] Mensajes personalizados MH + guard de token (`453cf0a`, §1.15): `mh_mensajes.json` copiado y servido público (fetch 200 directo), `util.js` incluido en TODA página que cargue getAuth/dte_auto/venta* (grep), guard de token en ambos JS, validación temprana de distrito de sucursal activa (probar con una sucursal en 0 → excepción accionable, no rechazo MH)
-- [ ] Catálogo `mh_mensajes.json` completo (§1.15 + §1.16): entradas base (distrito/municipio/token) + DUI/Giro (`60ed2bf`) + pronombres Receptor (`b216e9d7`) + `receptor_telefono` (`a015af67`) — el JSON final del HEAD del origen como referencia
+- [ ] Catálogo `mh_mensajes.json` completo (§1.15 + §1.16): entradas base (distrito/municipio/token) + DUI/Giro (`60ed2bf`) + pronombres Receptor (`b216e9d7`) + `receptor_telefono` (`a015af67`) — el JSON vigente del origen como referencia
 - [ ] Formulario de compras por JSON (`81a21a7`, §1.16): auditoría dual del esquema `cj_*` contra el destino, tabla `producto_proveedor_codigo` creada, menú/permiso dados de alta y `compras.php` resolviendo
 - [ ] PDF de factura con nombre manual (`5682cc14`, §1.17): la línea "CLIENTE :" prefiere `factura.extra_nombre` con fallback a la ficha; si el destino captura el nombre manual en otro campo, mapeo por ancla documentado
 - [ ] Aviso de suscripción completo y blindado (`47942220`+`f67299bc` + `6bfe423`, §1.9): archivos + imágenes con `ls` verificado, DESACTIVADO, y comportamiento probado: F5 lo respeta, duplicar pestaña lo muestra fresco, sin `disabled` que quitar, overlay borrado se reinstala sin reiniciar la cuenta; grep de `window.name` en el destino sin pisadores
