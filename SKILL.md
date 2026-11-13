@@ -918,6 +918,10 @@ continuo, ejecuta las fases en orden y reporta al final de cada una.
    que detecta el fallo clásico del port: el hunk copiado usa una clase del
    origen, el archivo portador del destino nunca la cargaba, y nadie mira el
    interior del hunk porque "la traza de endpoints no pasa por ahí".
+   Este pase verifica EXISTENCIA y CARGA; la dimensión que le falta —
+   unicidad de DECLARACIÓN y reutilización de símbolos que el destino ya
+   tiene en otra ruta — es la FASE 2.7 (obligatoria, se ejecuta después de
+   este pase y antes de la FASE 2.5).
    Puntos de entrada mínimos a trazar:
    - Generación DTE: botón "Crear DTE"/automático → `getAuth.js` (`crea_dte`) →
      `_helper_dte_class.php`/`generar_dte.php` → `clases/Dte.php` (y TODOS sus
@@ -1166,6 +1170,113 @@ encuentran hecha.
   listada con su causa o corregida antes del cierre.
 - Las re-evaluaciones de decisiones condicionales quedan documentadas en el
   registro (decisión original, condición que la reabre, veredicto final).
+
+## FASE 2.7 — Auditoría de declaraciones: colisiones de símbolos y reutilización (OBLIGATORIA, no opcional)
+
+La traza de llamadas (FASE 2 paso 10) verifica EXISTENCIA: "¿existe la función/
+clase que este hunk necesita en el destino?" — y un "sí" la da por buena. Ese
+criterio tiene tres huecos que un port real destapó en PRODUCCIÓN (port
+2026-11-12, fatal "Cannot declare class Model" en una página de caja días
+después del despliegue; ni `php -l`, ni la traza de dependencias, ni el pase de
+símbolos lo vieron):
+
+1. **Existencia ≠ unicidad de declaración.** La traza confirma que la clase
+   existe; no confirma que el símbolo NUEVO que el port acaba de introducir no
+   se declare TAMBIÉN en otra unidad que la misma petición carga. Dos archivos
+   físicos distintos que declaran `class Model` pasan lint, pasan trazas, y
+   reventan en runtime con "Cannot redeclare" en la primera página que cargue
+   ambos.
+2. **`require_once` deduplica por RUTA, no por símbolo.** Añadir el require
+   "correcto" no salva nada cuando hay DOS archivos distintos declarando el
+   mismo nombre (`clases/Model.php` vs `framework/Model.php`): cada uno se
+   carga una vez y chocan igual. El instinto "agrego el require que falta" es
+   exactamente lo que agrava el caso.
+3. **El destino ya tiene el símbolo en OTRA ruta, con otro nombre de archivo y
+   a veces otra forma.** El origen centraliza en un helper; el destino lo trae
+   inline en cada admin, o al revés. La traza ve "no está en el archivo
+   portador → lo porto", cuando en realidad estaba vivo a un include de
+   distancia: el resultado es una DUPLICACIÓN funcional que luego diverge en
+   mantenimiento (se arregla una copia y la otra queda rota) — la misma
+   familia de defecto que los bloques hermanos del correo (FASE 2.6), pero
+   nacida en el port en vez de heredada.
+
+La coherencia lógica (FASE 2.5) no cubre nada de esto: es la frontera entre lo
+que el port AÑADE y lo que el destino YA TIENE, y hay que auditarla como
+contrato propio.
+
+### Método (sobre el destino, sin navegador; sí-lógico: lint + CLI local)
+
+1. **Inventario de símbolos INTRODUCIDOS por el port.** Sobre el diff completo
+   del port (mismo pase mecánico del paso 10, esta fase lo extiende): para
+   cada hunk añadido a un archivo EXISTENTE del destino, enumerar los símbolos
+   GLOBALES nuevos que declara (funciones `function X`, clases `class X`,
+   constantes `define`) y los que REQUIERE NUEVAMENTE (requires añadidos).
+   Los archivos NUEVOS copiados del origen también cuentan: cada uno trae
+   todas sus declaraciones.
+2. **Cierre transitivo del conjunto declarado por la cadena de includes.** Por
+   cada archivo del destino que ejecutará esos símbolos (el portador y, sobre
+   todo, las PÁGINAS reales que lo cargan — vía `_core.php`, `_session.php`,
+   footers, helpers), calcular el conjunto UNIÓN de todos los símbolos que su
+   cadena de includes completa declara. Herramienta mínima: script PHP/CLI que
+   siga `require`/`include` recursivamente (respetando `require_once` por
+   ruta) y extraiga `function|class|interface|trait|define` de cada archivo
+   alcanzado. El conjunto de la página es lo que importa, no el del archivo
+   aislado.
+3. **Veredicto por símbolo (tres salidas, obligatorio elegir una y registrarla):**
+   - **COLISIÓN** — el símbolo ya se declara en ≥2 archivos físicos que la
+     misma página carga (o el port añade una declaración que ya existe en otra
+     ruta cargada): el runtime revienta o el comportamiento queda indefinido.
+     Resolución: UNIFICAR — los archivos duplicados se convierten en shims que
+     delegan (`require_once` a la implementación elegida) o se elimina la
+     declaración redundante; elegir la implementación por auditoría dual
+     (superset de API verificada función a función, constructor compatible).
+     Nunca resolver borrando "el que parece no usarse" sin el pase de
+     llamadores completo.
+   - **DUPLICADO FUNCIONAL** — el símbolo ya existe en una ruta alcanzable del
+     destino (distinto nombre de archivo, misma firma o equivalente): REUSAR.
+     El hunk portado se adapta al símbolo del destino (o se extrae el símbolo
+     a un punto común y ambas rutas incluyen el mismo), y NUNCA se vuelve a
+     declarar. Anotar el mapeo origen→destino en el registro (archivo del
+     origen → ruta real del destino → decisión reusar/portar).
+   - **NUEVO legítimo** — no existe en ninguna ruta alcanzable: portar con su
+     require en el portador (lo que el paso 10 ya hace). Verificar que el
+     NOMBRE no colisiona a futuro con archivos del destino que la página NO
+     carga hoy pero podría cargar tras otros ports (grep del nombre en todo el
+     destino; colisión potencial = nota en registro, no bloqueo).
+4. **Harness CLI por página mixta (la verificación canónica; obligatoria para
+   toda página que cargue ≥2 archivos tocados por el port).** Es el único
+   chequeo que ve el runtime real sin navegador: un script CLI que inicie
+   sesión falsa (`$_SESSION` mínima que los guards del destino acepten),
+   cargue la MISMA cadena de requires que carga la página en producción (en el
+   MISMO orden) y ejecute al final `class_exists`/`function_exists` +
+   `(new ReflectionClass('Model'))->getFileName()` para confirmar que cada
+   símbolo resuelve a UNA sola definición. Repetir en ambos órdenes de carga
+   (legacy-primero y framework-primero): el orden cambia qué archivo gana y
+   el port debe ser inmune a él. La página que reventó en producción
+   (`cortecaja_dia.php`) habría sido destapada aquí ANTES del despliegue por
+   este harness exacto.
+5. **Alcance de páginas:** no solo las que el port tocó directamente — toda
+   página que cargue archivos cuyo STACK cambió (ej.: si se unificó un ORM,
+   TODA página que cargue clases de ambos lados de la unificación; grep de los
+   requires de cada `*.php` raíz para armar el mapa, sin fiarse de la lista de
+   páginas "obvias"). En destinos con cientos de páginas, cubrir como mínimo:
+   las tocadas por el port, las que carguen los archivos cuyo stack cambió, y
+   una muestra aleatoria del resto (10%) como sondeo.
+
+### Salida obligatoria
+
+- El registro del port lleva la sección **"Colisiones de declaración y
+  reutilizaciones (FASE 2.7)"**: por cada símbolo auditado con veredicto
+  COLISIÓN o DUPLICADO FUNCIONAL — qué archivos lo declaraban, qué cadena los
+  cargaba, la resolución aplicada (unificación/reuso, con qué evidencia de
+  superset/API) y el resultado del harness CLI (página → ambos órdenes de
+  carga → símbolo → archivo que resuelve).
+- Los símbolos NUEVO legítimos se listan en resumen (los detalles finos ya
+  están en la traza del paso 10).
+- Si una colisión NO se corrige (decisión de alcance), queda en esa sección
+  como pendiente con su evidencia: una colisión latente jamás se silencia —
+  es una bomba de tiempo en producción (el caso real saltó DÍAS después del
+  port, en una página que nadie del port había tocado).
 
 ## FASE 3 — Cierre
 
