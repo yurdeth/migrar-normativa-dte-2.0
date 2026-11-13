@@ -664,6 +664,48 @@ continuo, ejecuta las fases en orden y reporta al final de cada una.
 6. Recordar al usuario: backup de BD antes de aplicar cualquier SQL, y que los
    cambios se aplican cuando él decida (la skill genera, no aplica sobre su BD).
 
+7. **Verificación de DUPLICADOS en el SQL de salida (OBLIGATORIA antes de cerrar
+   la FASE 1).** En TODOS los ports reales ejecutados ha aparecido contenido
+   duplicado en el out.sql (la lección es sistemática, no puntual): el
+   `sync_schema.php` inserta datos de las tablas que CREÓ, y cualquier bloque
+   posterior que se concatene (corrector de catálogos, INSERTs de `modulo`,
+   datos correctores) puede volver a insertar lo mismo, o pisar con otro
+   espacio de ids. El out.sql se entrega sin revisar = el usuario aplica
+   redundancias o corrupciones silenciosas. Verificar SIEMPRE, con este método:
+
+   a. **Análisis estático del out.sql:** parsear el archivo y extraer TODAS las
+      sentencias. Detectar: (i) dos o más `INSERT INTO \`tabla\`` para la MISMA
+      tabla sin un `TRUNCATE`/`DELETE` intermedio que los justifique; (ii)
+      tuplas duplicadas: normalizar cada tupla de VALUES y buscar la MISMA
+      `(tabla, tupla)` en dos bloques distintos; (iii) bloques muertos: un
+      `INSERT` a una tabla que después es truncada y re-insertada (el primer
+      bloque nunca aporta y se elimina — esto NO es poda de esquema, es
+      eliminar sentencias provadamente superflua; la regla dura del punto 2
+      solo protege tablas/columnas, no duplicados de datos).
+   b. **Choque de espacios de ids en bloques concatenados:** cuando se agregue
+      un bloque corrector o de datos, comparar su espacio de ids contra el de
+      la tabla en el dump destino ANTES de concatenarlo. Si difiere (ej. el
+      bloque trae una fila extra tipo "Otro País" que desplaza los ids +1, o
+      simplemente numeración distinta), su `ON DUPLICATE KEY UPDATE` por `id`
+      PISA FILAS EQUIVOCADAS del destino — regenerar las correcciones keyed
+      por la clave estable del dominio (`codigo` CAT-013 + `id_departamento`
+      para distritos; NUNCA `id` solo; y ojo: `distritoMH.codigo` NO es único
+      global, se repite por departamento). Caso real (port 2026-11-12): el
+      corrector renombraba "AHUACHAPÁN" (id 1 destino) a "Otro País" (id 1 del
+      bloque); detectado solo porque se aplicó el out.sql a una BD de prueba.
+   c. **Prueba de aplicación en BD de descartable (la verificación canónica).**
+      El análisis estático no alcanza. Cargar el dump DESTINO en una BD
+      temporal, aplicar el out.sql completo, y verificar: (1) exit=0 sin
+      errores; (2) conteos por tabla nueva/corregida contra lo esperado; (3)
+      que las filas preexistentes del destino NO fueron pisadas (spot-check
+      por id de filas que el bloque podría tocar); (4) que las correcciones
+      quedaron aplicadas (fila a fila contra el catálogo saneado). Eliminar la
+      BD temporal al terminar. Si no hay BD disponible, hacer al menos (a)+(b)
+      y dejar la prueba (c) como pendiente explícito en el registro.
+   d. **Registro:** el registro del port lleva la sección "SQL de salida:
+      duplicados detectados y eliminados" con cada hallazgo, su mecanismo
+      (quién lo insertó dos veces) y el veredicto tras la prueba (c).
+
 ## FASE 2 — Port de código (selectivo, por commit)
 
    Leer `references/GUIA_PORT_NORMATIVA_2_0_CLIENTES.md` completo y seguirla como
