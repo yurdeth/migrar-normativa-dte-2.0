@@ -171,8 +171,9 @@ Ejecutar en orden. Cada fase se ejecuta leyendo SU sección completa en
   opcionales preguntados, commits post-rango, `php -l`/`node --check` y traza de llamadas
   por punto de entrada Y por hunk. **Antes de empezar, verificar contra el HEAD del origen
   que no haya commits nuevos fuera del rango documentado** (regla de "revisar del último
-  commit portado hacia arriba" — los últimos incorporados están en la guía §1.18,
-  commits `e82d5af0`, `84629642`, `4f0b74cd` del lote 2026-11-16).
+  commit portado hacia arriba" — los últimos incorporados están en la guía §1.18
+  (lote 2026-11-16: `e82d5af0`, `84629642`, `4f0b74cd`) y §1.19 (lote 2026-11-20:
+  `df6079d5`, `6593cd05`).
 - **FASE 2.5 — Revisión de coherencia lógica funcional (OBLIGATORIA):** matriz
   estado×acción, etiqueta↔efecto, contratos de parámetros; los defectos del origen se
   mitigan, no se copian.
