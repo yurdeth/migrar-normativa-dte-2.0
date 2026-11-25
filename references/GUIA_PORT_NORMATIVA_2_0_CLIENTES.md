@@ -107,7 +107,7 @@ Componentes (los 4 frentes: cliente, proveedor, sucursal, venta):
    - Al elegir un resultado: `$("#departamento").val(data.id_departamento)` + recargar municipios + recargar distritos y seleccionar el elegido (`trigger('change.select2')`).
    - **Adaptación por destino:** el JS de cada formulario puede diferir (ej. `cliente.js` del origen vs `funciones_cliente.js` del destino — un destino real usó nombres distintos y el cambio se omitió en silencio por no existir el archivo del origen). Buscar el ancla equivalente: el handler `$("#municipio").change` con `process: "getDistrito"` que el destino ya suele tener. **Regla general (ver skill, "Equivalencias funcionales"):** si el archivo del origen no existe en el destino, grep del ancla en TODO el destino, portar al equivalente y anotar el mapeo; nunca omitir por "no existe el archivo". Un frente cuenta como portado solo si la cascada inversa quedó materializada en su archivo real (verificación por comportamiento, no por presencia).
 4. **Lectura y guardado:** el backend del formulario debe recibir `distrito` del POST y guardar `'id_distrito' => $distrito` (en `agregar_cliente()` de venta y en los ABM de cliente/proveedor/sucursal que el destino ya suele tener).
-5. **Cache-busting:** incluir los JS con `include_js_once()` (versión por `filemtime`) en las páginas de admin de cliente/proveedor — si el destino aún usa `<script src>` fijo, cambiarlo.
+5. **Cache-busting:** incluir los JS con `include_js_once()` (versión por `filemtime`) en las páginas de admin de cliente/proveedor — si el destino aún usa `<script src>` fijo, cambiarlo. Es una instancia de la regla general de §1.20 (todo JS de `js/funciones/` tocado por el port, en TODAS las páginas que lo importan).
 
 ### 1.6 PDFs y tickets
 
@@ -127,14 +127,14 @@ Componentes (los 4 frentes: cliente, proveedor, sucursal, venta):
 | `admin_factura_rangos_dt.php` | Bloques "JSON DTE" (`descarga_dte_json.php`) y "Evento Retorno" (COF/EXP con `$recibido` y `!$anuladoDTE`). **Mantener** el `ver_ventas.php` del destino si `ver_fact.php` no existe allí |
 | `admin_compras_fecha.php` | Div de botones "DTE Emitidos" (btnPdf/btnXls/**btnJson**/btnAllPdf) |
 | `admin_compras_fecha_dt.php` | Lógica FSE: `firmada/recibida/anuladoDTE` con `'14'`, sello de anulación vía `anuladoDTEData($id,'FSE')`, bloque "Evento Retorno" FSE, "PDF Compra" (`pdf_compra.php`). Los renombres `estado→estado2` etc. viajan juntos. Suele poder copiarse completo si no hay código propio del destino |
-| Cache-busting | `admin_cliente.php` / `admin_proveedor.php`: incluir los JS con `include_js_once()` en vez de `<script src>` fijo |
+| Cache-busting | `admin_cliente.php` / `admin_proveedor.php`: incluir los JS con `include_js_once()` en vez de `<script src>` fijo (regla general: §1.20) |
 
 ### 1.8 Commits recientes del rango (post-primer-port, incluir en el port)
 
 | Commit | Qué trae | Alcance del port |
 |---|---|---|
 | `dbbfcfa` | `anular()` de `clases/Factura.php` distingue ENTRADA/SALIDA | Portar completo el método: si el movimiento de la factura es ENTRADA (devolución/NC), la reversa se crea como SALIDA y **resta** stock global y de `stock_ubicacion.id_destino`; si es SALIDA conserva el comportamiento original (suma al `id_origen`). Sin esto, el eraser revienta con "No se encontro el registro de stock ubicacion para el ID 0" al anular una NC (la devolución inserta su SU con `id_origen=0` por diseño en `devolucion.php`), y el flujo de dos pasos (eraser → `anulada=1` → aparece "DTE Anulación") nunca llega a MH |
-| `3ccb8ef` | Cache-busting de JS en admins | `admin_cliente.php` y `admin_proveedor.php`: reemplazar los `echo <script src>` fijos por `include_js_once('js/funciones/...')` (versión por `filemtime`; la función ya existe en `_helpers.php` del destino) |
+| `3ccb8ef` | Cache-busting de JS en admins | `admin_cliente.php` y `admin_proveedor.php`: reemplazar los `echo <script src>` fijos por `include_js_once('js/funciones/...')` (versión por `filemtime`; la función ya existe en `_helpers.php` del destino). Es el ejemplo del mecanismo: la regla general —todo JS de `js/funciones/` que el port toque, en todas las páginas que lo importan— está en §1.20 |
 | `bc1a86a` | Sello del evento de retorno visible en el admin | `dte/scripts/_utiles.php`: función `eventosERET($id_factura)` (consulta tabla `evento`, tipo ERET, con sello). `admin_factura_rangos_dt.php`: en la columna de estado, para COF/EXP mostrar "SELLO EVENTO RETORNO" por cada ERET aceptado. **Requisito real: la tabla `evento` debe existir y tener filas** — indagar contra datos reales, no dar por bueno el port solo porque compile |
 | `050e6607` | Coherencia en admin de compras: "Anular" de `admin_compras_fecha_dt.php` solo se renderiza con `anulada==0` (sobre una compra anulada, el único desenlace era el throw de `anular_compra.php`) | Portar SIEMPRE: es la materialización del principio de la FASE 2.5 (acción visible = acción ejecutable). Verificar que el destino lea `anulada` antes del bloque del menú; el guard del backend queda como segunda barrera |
 | `f996452` | Descarga individual del JSON: `descarga_dte_json.php` (nuevo; sirve `{codigoGeneracion}.json` con sello inyectado, solo DTE con codigoMsg 001/002) + ítem "JSON DTE" en el menú de `admin_factura_rangos_dt.php` + **INSERT en `modulo`** (en el origen va en `db/alter.sql`, menú facturación `id_menu=5`, `mostrarmenu=0`) | Portar el commit COMPLETO (3 archivos): endpoint, ítem de menú y la línea del INSERT en el `alter.sql` del destino (adaptada a su convención local — el commit la trae así y así queda registrada para futuras instalaciones). Además, integrarlo al flujo de migración: al generar el `out.sql` con `sync_schema.php`, consultar contra la BD del destino `SELECT ... FROM modulo WHERE filename='descarga_dte_json.php'`; si la fila no existe, **agregar el INSERT al final del out.sql** que se pasará a producción, resolviendo el `id_menu` contra la BD del DESTINO (`SELECT id_menu FROM modulo WHERE filename='admin_factura_rangos.php'`, no asumir el 5 del origen) y `mostrarmenu=0`. Sin la fila en `modulo`, `permission_usr` devuelve NOT para operadores y solo funciona con admin (bypass): "funciona con admin" NO valida el port. Ojo: el endpoint consulta `factura JOIN jsonDTE` — solo sirve DTE de venta, no FSE de compra |
@@ -456,6 +456,104 @@ Los dos: portar SIEMPRE (robustez de los flujos de cobro y de generación de DTE
 | `df6079d5` | `venta.js` (handler `click` de `#modalPago .modal-body #btnPrintFact`): ANTES de la validación `totalPagado < totalFactura`, recalcula `totalPagado` desde el DOM (reset a 0 + suma de cada `.montoPago` del modal). La variable global puede quedar desactualizada si el usuario no pasó por Enter/Tab en el campo de monto (editó el input sin disparar el evento que la suma) → la validación comparaba contra un total viejo y bloqueaba un pago legítimo (o dejaba pasar uno incompleto en el caso inverso) | Portar SIEMPRE al JS de venta, por ANCLA (el handler `#btnPrintFact` — el JS del destino puede llamarse `venta.js`, `funciones_venta.js` u otro; regla de equivalencias funcionales). Por la regla de venta partida (§6.1): si `venta2` está en uso y tiene su propio JS con ese handler, aplicar en AMBOS. Prueba de cierre: editar el monto SIN salir del campo y cobrar → acepta el pago correcto |
 | `6593cd05` | `clases/Dte.php` (sección pagos, `condicionOperacion==2`): blindaje del pago a crédito al armar el JSON — (a) `(object)` cast del retorno de `getFacturaPagoTipo` (puede llegar array u objeto según el destino), (b) `$periodo_credito = (int)($tipo_pago_credito->periodo ?? 0)` y `$dias_plazo = $periodo_credito > 0 ? $periodo_credito : 30`, (c) `$plazo = !empty($tipo_pago_credito->plazo) ? $tipo_pago_credito->plazo : '01'`. El `?? 30`/`?? '01'` anterior NO protegía: `intval(null ?? ...)` y un `periodo=0` o `plazo=''` de una fila real de `factura_pago` atravesaban el null coalescing y producían un JSON con plazo/periodo inválidos (rechazo MH en la sección pagos) | Portar SIEMPRE con el merge de `clases/Dte.php`. Es la evolución del error 16 (stdClass en pagos a crédito): unificar CUALQUIER bloque de la sección pagos que no tenga los tres blindajes (cast + periodo>0 + !empty plazo), no solo este hunk. Prueba de cierre: factura a CRE con fila `factura_pago` con `periodo=0` o `plazo=''` → el JSON lleva 30/'01' y MH no rechaza |
 
+### 1.20 Cache-busting de los JS de `js/funciones/` tocados por el port (regla general del mecanismo de `3ccb8ef`)
+
+**Portar SIEMPRE, sin preguntar.** El commit `3ccb8ef` solo lo aplicó a dos
+admins, pero el mecanismo es de todo el port: cada vez que la migración crea o
+modifica un archivo de `js/funciones/`, el navegador del cliente puede seguir
+usando la copia vieja que tenía en caché. Sin cache-busting el port queda
+"instalado" pero el cliente ejecuta el JS anterior (la búsqueda de distrito no
+aparece, un fix de JS parece no haber surtido efecto) y la única salida es
+pedirle que borre caché — eso es justo lo que esta regla evita.
+
+**Por qué esa carpeta:** todo lo que vive dentro de `js/funciones/` es JS
+propio del sistema y dinámico (un archivo por página, se modifica con
+frecuencia). Las librerías de `js/plugins/` no cambian con el port y quedan
+fuera de la regla.
+
+**Mecanismo:** `include_js_once($file)` de `_helpers.php` — imprime el
+`<script>` una sola vez por archivo y le agrega `?v=<filemtime>`, así cada
+modificación del archivo cambia la URL y el navegador lo vuelve a pedir:
+
+```php
+function include_js_once($file)
+{
+    static $included_files = [];
+
+    if (!in_array($file, $included_files)) {
+        $included_files[] = $file;
+        echo '<script src="' . $file . '?v=' . filemtime($file) . '"></script>';
+    }
+}
+```
+
+**Alcance: los JS TOCADOS por el port, no toda la carpeta.** No se recorre el
+destino convirtiendo todos sus `js/funciones/`. Se arma la lista con los JS de
+`js/funciones/` que el port **creó** (nuevos copiados del origen:
+`evento_retorno.js`, `compras_json.js`...) o **modificó** (merges por ancla:
+`getAuth.js`, `dte_auto.js`, `venta*.js`, `notacredito.js`, `funciones_*` de los
+4 frentes de distritos, `util.js`...). La lista sale del propio diff del port y
+de los archivos copiados; los JS que el port no tocó se dejan como están.
+
+**Procedimiento, para CADA JS de esa lista:**
+
+1. **Buscar TODOS los lugares del destino que lo importan**, no solo la página
+   que se acaba de portar: grep del nombre del archivo (`grep -rn
+   'X\.js' <destino>` sobre PHP, excluyendo `*.old` y copias de respaldo).
+   Un mismo JS suele cargarse desde varias páginas (alta, edición, admin,
+   footers); si una sola queda con el `<script src>` fijo, esa página sigue
+   sirviendo el JS viejo y el defecto reaparece "solo a veces, según por dónde
+   entre el operador".
+2. **Reemplazar cada import fijo por `include_js_once('js/funciones/X.js')`**,
+   en el mismo lugar y orden que tenía el tag original (no moverlo al final ni
+   agrupar en el footer: el orden de carga entre scripts se conserva):
+   - Si el tag estaba en modo PHP (típico: `echo "<script type='text/javascript'
+     src='js/funciones/X.js'></script>";`, como en `3ccb8ef`) → reemplazar el
+     `echo` por la llamada: `include_js_once('js/funciones/X.js');`
+   - Si el tag era HTML plano (`<script src="js/funciones/X.js"></script>`) →
+     reemplazar por `<?php include_js_once('js/funciones/X.js'); ?>`
+   - Los imports que ya llevaban una versión fija a mano (`?t=...`, `?v=`)
+     cuentan como fijos: también se reemplazan.
+   - Antes de insertar, aplicar la regla del MODO DE PARSING de la FASE 2
+     (error 22): pegar PHP en una zona HTML lo emite como texto visible.
+3. **JS nuevos del port:** donde sea que el port agregue su inclusión, agregarla
+   directamente con `include_js_once()`, nunca con `<script src>` fijo.
+
+**Verificaciones (todas, por archivo y por página tocada):**
+
+- `include_js_once` existe en el destino (`grep -n 'function include_js_once'
+  _helpers.php`) y la página la tiene cargada (llega a `_core.php` →
+  `_helpers.php`; si no, fatal "undefined function" que `php -l` no ve). Si el
+  destino no tuviera la función, agregarla a su `_helpers.php` con el código de
+  arriba (tal cual) y anotarlo en el registro.
+- La ruta pasada resuelve desde la raíz del destino: `filemtime()` sobre una
+  ruta inexistente emite warning y deja `?v=` vacío (cache-busting muerto sin
+  error visible). Comprobar con `php -r 'echo filemtime("js/funciones/X.js");'`
+  ejecutado en la raíz del destino. Ojo con páginas en subdirectorios o tags
+  que usaban prefijo (`../js/...`): la ruta sirve para DOS cosas (leer el
+  archivo y armar la URL), verificar que con la ruta usada ambas resuelven; si
+  el tag original usaba un prefijo distinto, es un hallazgo para el registro,
+  no para improvisar.
+- El tag original NO llevaba `defer`/`async` ni atributos que importen: la
+  función emite un `<script>` plano y los perdería (y con `defer`/`async`
+  cambiaría el orden de ejecución). Si alguno lo llevaba, no reemplazar a
+  ciegas: registrarlo como hallazgo con evidencia.
+- Cierre: re-grep de cada JS de la lista → no queda ningún `<script src>` fijo
+  que lo importe en archivos en uso. Si un import queda sin convertir (p. ej.
+  un JS cargado desde otro JS con `$.getScript`, donde la función PHP no
+  alcanza), queda listado en el registro como pendiente con su evidencia,
+  nunca en silencio.
+- `php -l` en cada página tocada, con el binario de PHP del runtime del
+  destino.
+
+**Salida:** el registro lleva la sección **"Cache-busting de JS tocados"**:
+una fila por JS (archivo → páginas donde se convirtió el import → resultado de
+las verificaciones → pendientes). En el informe final, decirle al usuario que
+los JS tocados ya recargan solos: no hace falta pedirle al cliente que borre
+caché.
+
+---
+
 ## 2. COMMITS NO NORMATIVOS DETECTADOS (no portar por defecto)
 
 Trazados con `git log -S`. Están en el rango temporal o cerca, pero NO son normativa:
@@ -585,7 +683,7 @@ destinos tienen dos archivos casi idénticos: `venta.php` (sin DTE automático) 
 - [ ] ERET con lotes: verificado en el destino si maneja lotes y rama portada en consecuencia (con lotes → reingreso FIFO a los lotes de la venta; sin lotes → solo rama genérica) (§1.10, `6007e66`)
 - [ ] Descarga pública del DTE operativa: `downloads/descargadte.php` + `dteqr_pdf.php`/`dteqr_json.php` (QR del PDF apunta a ellos), marca de agua ANULADO y JSON sellado sin escritura a disco (§1.11, `39fa0ec`)
 - [ ] Modal de reenvío de DTE operativo (§1.12, `d0ad9de`): endpoint copiado, ítem "Reenviar DTE" con permiso, `tipoDTE()` sin colisión de nombre, JSON `{success,message}` del modal llega íntegro (ob_start), y las TRES vías de envío trazadas (automática / Enviar PDF DTE / Reenviar DTE)
-- [ ] Cache-busting en páginas admin tocadas
+- [ ] **Cache-busting de los JS tocados (§1.20, siempre, sin preguntar)**: todo JS de `js/funciones/` que el port creó o modificó se incluye con `include_js_once()` en TODAS las páginas del destino que lo importan (re-grep sin `<script src>` fijo); `include_js_once` cargada en cada página, ruta resuelta con `filemtime`, sin `defer`/`async` perdidos; sección "Cache-busting de JS tocados" en el registro — incluye lo de `3ccb8ef` en admin cliente/proveedor
 - [ ] Todo `php -l` + `node --check` en verde (piso mínimo, no suficiente)
 - [ ] **Traza de llamadas verificada** por punto de entrada (generación, respuesta MH, anulación, PDF, ERET, admins): cada función/clase/require existe en el destino con firma compatible; dependencias faltantes adaptadas y anotadas
 - [ ] **Pase de símbolos nuevos sobre el diff COMPLETO del port**: cada hunk fusionado en un archivo existente no introduce ninguna clase/función/constante que el archivo portador no cargue (requires verificados/agregados; sin autoload, el require es responsabilidad del portador)

@@ -173,7 +173,10 @@ Ejecutar en orden. Cada fase se ejecuta leyendo SU sección completa en
   que no haya commits nuevos fuera del rango documentado** (regla de "revisar del último
   commit portado hacia arriba" — los últimos incorporados están en la guía §1.18
   (lote 2026-11-16: `e82d5af0`, `84629642`, `4f0b74cd`) y §1.19 (lote 2026-11-20:
-  `df6079d5`, `6593cd05`).
+  `df6079d5`, `6593cd05`). **Cache-busting obligatorio**: todo JS de
+  `js/funciones/` que el port cree o modifique se incluye con
+  `include_js_once()` en TODAS las páginas del destino que lo importan, para
+  que el cliente no tenga que borrar caché (guía §1.20, FASE 2 paso 5b).
 - **FASE 2.5 — Revisión de coherencia lógica funcional (OBLIGATORIA):** matriz
   estado×acción, etiqueta↔efecto, contratos de parámetros; los defectos del origen se
   mitigan, no se copian.

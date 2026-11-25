@@ -247,12 +247,13 @@
      esperado. Un script de 15 líneas sobre `git diff` basta.
 4. Opcionales que el usuario de este flujo suele querer: preguntar explícitamente
    si porta el **correo en modal de pago** (commit `7c8d0e5`; en sistemas con
-   modal de pago propio, revisar su estructura antes de insertar el campo) y el
-   cache-busting `include_js_once()` en las páginas admin tocadas.
+   modal de pago propio, revisar su estructura antes de insertar el campo). El
+   cache-busting de JS NO es opcional: ver el paso 5b y la guía §1.20.
 5. Commits recientes del rango que también se portan (guía §1.8): `dbbfcfa`
    (anular() distingue ENTRADA/SALIDA: sin esto, anular una devolución/NC
    revienta con "stock ubicacion ID 0" y el flujo hacia "DTE Anulación" se
-   bloquea), `3ccb8ef` (cache-busting de JS en admin cliente/proveedor) y
+   bloquea), `3ccb8ef` (cache-busting de JS en admin cliente/proveedor — caso
+   particular del paso 5b) y
    `bc1a86a` (sello del evento de retorno visible en el admin: `eventosERET()`
    en `_utiles.php` + bloque en `admin_factura_rangos_dt.php`). El commit
    `bc1a86a` puede que el destino ya lo tenga (se difundió por separado):
@@ -262,6 +263,18 @@
    una compra ya anulada el único desenlace del click era el rechazo del
    backend; es materialización directa del principio de la FASE 2.5 y portar
    SIEMPRE, junto con el archivo del que forma parte).
+   5b. **Cache-busting de los JS tocados (OBLIGATORIO, sin preguntar; guía
+   §1.20).** Armar la lista de los JS de `js/funciones/` que el port CREÓ o
+   MODIFICÓ (a partir del diff del port y de los archivos nuevos) — NO toda la
+   carpeta. Por cada uno: grep en TODO el destino de los lugares que lo
+   importan y reemplazar CADA `<script src>` fijo por
+   `include_js_once('js/funciones/X.js')` en su mismo lugar y orden (en modo
+   PHP reemplaza al `echo`; en HTML plano va envuelto en `<?php ... ?>` —
+   regla del modo de parsing del punto 3). Los JS nuevos se incluyen así desde
+   el inicio. Verificar por página: `include_js_once` cargada, ruta que
+   resuelve con `filemtime`, sin `defer`/`async` que perder, y re-grep de
+   cierre sin imports fijos. Sección "Cache-busting de JS tocados" en el
+   registro. Objetivo: el cliente nunca tiene que borrar caché.
 6. Correcciones de robustez de correo recomendadas (ver guía §5): guard
    `EMAIL_CC=false`, adjunto del envío `output=file` leyendo el PDF de `pdfdtes/`,
    y try/catch alrededor del envío Postmark para que un fallo de correo no rompa
