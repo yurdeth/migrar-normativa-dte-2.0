@@ -338,6 +338,14 @@
    columna legacy de la venta) con fallback al nombre de la ficha. Una línea dentro del merge del PDF (paso 1);
    verificar contra el destino si su captura de nombre manual vive en otro campo (mapear por ancla) o no existe
    (la línea queda inocua, portar igual para alinear con el origen).
+   7f. `d050d1f` — redondeo de descuentos por porcentaje en COF + clave de
+   contraseña de BD (guía §1.21): en el `getCuerpoCOF`/`getResumenCOF` del
+   destino, `montoDescu` y `totalDescu` a 2 decimales y `ventaGravada =
+   round(cantidad × precioUni − montoDescu, 2)` (las líneas van JUNTAS, cuerpo
+   y resumen; CCF/NC no se tocan). Además, las DOS copias de `ConnectMedoo.php`
+   (`clases/` y `config/`) leyendo la contraseña con
+   `$_ENV['DB_PASSWORD'] ?? ($_ENV['DB_PASS'] ?? '')`; verificar antes la
+   clave real del `.env` del destino.
 8. **venta2**: aplicar la regla de `venta.php`/`venta2.php` de references/REGLAS_PORT.md
    ("El criterio de parada") — detectar si venta2 está en uso o es residuo y, si está
    en uso, repetir en él todos los cambios de venta (sin unificar).

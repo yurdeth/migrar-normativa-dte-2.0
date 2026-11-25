@@ -552,6 +552,20 @@ las verificaciones → pendientes). En el informe final, decirle al usuario que
 los JS tocados ya recargan solos: no hace falta pedirle al cliente que borre
 caché.
 
+### 1.21 Post-rango 2026-11-24: redondeo de descuentos por porcentaje en COF + clave de contraseña de BD (`d050d1f`)
+
+Portar SIEMPRE. Dos partes sin relación entre sí dentro del mismo commit.
+
+| Archivo | Qué trae | Port |
+|---|---|---|
+| `clases/Dte.php` — `getCuerpoCOF` | (1) `montoDescu` del ítem pasa de `round(..., 4)` a `round($rowDte->descuento, 2)` (múltiplo de 0.01, regla MH de `resumen.totalDescu`); (2) en la rama gravada, `ventaGravada` ya no es el subtotal de BD: ahora `round(cantidad × precioUni − montoDescu, 2)` — identidad exacta contra los valores publicados en el cuerpo | Portar las dos líneas juntas en el `getCuerpoCOF` (o equivalente) del Dte.php VIVO del destino. Con un descuento por porcentaje, la BD guarda el descuento con 4 decimales y publicarlo así rompía la identidad del ítem y del resumen. Va después de `19eda0e` (§1.9, `ivaItem=0` en exentos): mismo bloque, no se pisan |
+| `clases/Dte.php` — `getResumenCOF` | `totalDescu = round($datosDTE->descuento, 2)` (antes a 4 decimales) | Portar junto con el cuerpo: el resumen a 4 decimales contra ítems a 2 vuelve a descuadrar la suma. Conserva la regla de `ac76119` (§1.9): `montoTotalOperacion = $subTotal`, sin restar `totalDescu` de nuevo |
+| `clases/ConnectMedoo.php` + `config/ConnectMedoo.php` | La contraseña se lee con `$_ENV['DB_PASSWORD'] ?? ($_ENV['DB_PASS'] ?? '')` — acepta cualquiera de las dos claves según el `.env` de cada proyecto | Portar siempre en AMBAS copias (varios modelos incluyen `clases/`, al menos los de compras incluyen `config/`; una corregida y la otra no deja el mismo síntoma según el modelo que falle). Antes de confiar en el `??`: mirar la clave real del `.env` del destino — si usa otra distinta de esas dos, la contraseña queda `''` y la conexión a BD falla en silencio desde los modelos |
+
+**Solo la COF cambió.** El commit no tocó `getCuerpoCCF`/`getCuerpoNC` ni sus resúmenes: siguen redondeando el descuento a 4 decimales. NO "alinearlos" con este cambio — aplican las reglas propias de `64a1dac` (§1.14) y de `ac76119` para CCF.
+
+**Prueba de cierre (ambiente 00):** COF con descuento por porcentaje que dé más de 2 decimales por ítem — `montoDescu` con 2 decimales, `ventaGravada = cantidad × precioUni − montoDescu` exacto, `resumen.totalDescu` igual a la suma de los ítems, sello otorgado sin observación. Y, en el destino, que un modelo que cargue cada copia de `ConnectMedoo` conecte.
+
 ---
 
 ## 2. COMMITS NO NORMATIVOS DETECTADOS (no portar por defecto)
@@ -700,4 +714,5 @@ destinos tienen dos archivos casi idénticos: `venta.php` (sin DTE automático) 
 - [ ] Post-rango 2026-11-16 (§1.18): pagos de venta con retención comparados a 2 decimales (`e82d5af0`, en venta y venta2 si ambas en uso); observaciones del PDF leídas de `resumen.observaciones` con fallback a extension en los DOS sitios del generador (`84629642`); compra de servicios sin romper la búsqueda de productos/presentaciones (`4f0b74cd`, convención `bandera` auditada contra el destino)
 - [ ] Post-rango 2026-11-20 (§1.19): `totalPagado` recalculado desde el DOM en el handler `#btnPrintFact` de cada JS de venta en uso (`df6079d5`); pagos a crédito blindados en `Dte.php` (cast `(object)` + `periodo>0 ? periodo : 30` + `!empty(plazo) ? plazo : '01'`, en TODOS los bloques de la sección pagos, `6593cd05`)
 - [ ] Aviso de suscripción completo y blindado (`47942220`+`f67299bc` + `6bfe423`, §1.9): archivos + imágenes con `ls` verificado, DESACTIVADO, y comportamiento probado: F5 lo respeta, duplicar pestaña lo muestra fresco, sin `disabled` que quitar, overlay borrado se reinstala sin reiniciar la cuenta; grep de `window.name` en el destino sin pisadores
+- [ ] Post-rango 2026-11-24 (`d050d1f`, §1.21): `getCuerpoCOF` con `montoDescu` a 2 decimales y `ventaGravada = cantidad × precioUni − montoDescu`; `getResumenCOF` con `totalDescu` a 2 decimales; `ConnectMedoo` (ambas copias) aceptando `DB_PASSWORD` o `DB_PASS`. CCF/NC sin tocar
 - [ ] Pruebas ambiente 00 del checklist §4.6
